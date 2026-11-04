@@ -1,11 +1,13 @@
 """Run identity: a hash of config, code, generated data and library versions.
 
 Two runs with the same fingerprint should produce the same metrics (bitwise on CPU). Any change to the
-config, to a source file under src/dr, to the generated day set, to library versions or to the resolved
-device changes it.
+config, to a source file under src/dr, to the generated day set, to library or Python versions, to the
+OS/CPU architecture or to the resolved device changes it. scripts/ are deliberately excluded: they only
+launch and report, so editing them must not invalidate recorded runs.
 """
 import hashlib
 import json
+import platform
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +48,7 @@ def data_hash(cfg):
 def fingerprint(cfg, device):
     """Return the hash components and the combined `fingerprint`."""
     parts = dict(config_hash=config_hash(cfg), code_hash=code_hash(), data_hash=data_hash(cfg),
-                 libs=f"torch{torch.__version__}+numpy{np.__version__}", device=device)
+                 libs=f"torch{torch.__version__}+numpy{np.__version__}+py{platform.python_version()}",
+                 platform=f"{platform.system()}-{platform.machine()}", device=device)
     parts["fingerprint"] = hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
     return parts
