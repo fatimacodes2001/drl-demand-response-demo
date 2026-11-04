@@ -95,3 +95,21 @@ def bench(rows):
     np.atleast_1d(ax)[0].legend()
     fig.tight_layout()
     return fig
+
+
+def board(cells, title):
+    """Connect Four position: X for player 1, O for player -1, with the move order written on the discs."""
+    rows, cols = cells.shape
+    fig, ax = plt.subplots(figsize=(cols * 0.6 + 0.4, rows * 0.6 + 0.8))
+    ax.set_facecolor("#1f4e9a")
+    for r in range(rows):
+        for c in range(cols):
+            v = cells[r, c]
+            color = "#f2c230" if v > 0 else "#d9413c" if v < 0 else "white"
+            ax.add_patch(plt.Circle((c, r), 0.42, color=color))
+            if v != 0:
+                ax.text(c, r, str(abs(int(v))), ha="center", va="center", fontsize=8, color="black")
+    ax.set(xlim=(-0.5, cols - 0.5), ylim=(-0.5, rows - 0.5), xticks=range(cols), yticks=[], title=title)
+    ax.set_aspect("equal")
+    fig.tight_layout()
+    return fig

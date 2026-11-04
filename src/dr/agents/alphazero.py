@@ -2,9 +2,12 @@
 
 The loop is the AlphaZero one: (1) self-play episodes where the search picks actions,
 (2) train the network on (state -> visit-count policy, return-to-go value), (3) repeat, so
-the improved network makes the next search stronger. Here the "opponent" is the stochastic
-day (prices, load, events), and the known env dynamics act as the model, so there is no
-MuZero-style learned dynamics. Search runs on a numpy copy of the weights (cheap, CPU).
+the improved network makes the next search stronger. The env is the model (no MuZero-style
+learned dynamics) and search runs on a numpy copy of the weights.
+
+Envs with `two_player = True` (Connect Four) report rewards for the player who just moved, and
+values flip sign at every ply during backup and when computing targets. Single-player envs
+(demand response) accumulate discounted rewards as usual.
 """
 import numpy as np
 import torch
@@ -66,6 +69,8 @@ def expand(node, net, vscale):
 def search(env, net, a, rng, noise):
     """Run PUCT simulations from `env` and return the root visit counts."""
     vs, g, c = a["value_scale"], a["gamma"], a["c_puct"]
+    # in a two-player game the child's value is the opponent's, so it enters the parent negated
+    sign = -1.0 if getattr(env, "two_player", False) else 1.0
     root = Node(env.clone())
     expand(root, net, vs)
     if noise:
@@ -93,7 +98,7 @@ def search(env, net, a, rng, noise):
                 break
             node = child
         for nd, ac in reversed(path):
-            G = nd.R[ac] + g * G
+            G = nd.R[ac] + g * sign * G
             nd.N[ac] += 1
             nd.W[ac] += G
     return root.N
@@ -123,6 +128,7 @@ class AlphaZeroAgent(BaseAgent):
         """Play one training day choosing actions from search visit counts; store (state, pi, return)."""
         env = self.task.make_env()
         env.reset(self.sample_day())
+        sign = -1.0 if getattr(env, "two_player", False) else 1.0
         obs_l, pi_l, rew_l, done = [], [], [], False
         while not done:
             visits = search(env, net, self.a, self.rng, noise=True)
@@ -136,7 +142,7 @@ class AlphaZeroAgent(BaseAgent):
             self.sims_total += self.a["sims"]
         G, z = 0.0, []
         for r in reversed(rew_l):
-            G = r + self.a["gamma"] * G
+            G = r + self.a["gamma"] * sign * G
             z.append(G / self.a["value_scale"])
         for o, p, v in zip(obs_l, pi_l, reversed(z)):
             self.B["obs"][self.i], self.B["pi"][self.i], self.B["z"][self.i] = o, p, v

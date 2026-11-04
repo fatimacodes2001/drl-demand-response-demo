@@ -1,0 +1,16 @@
+# Two-player self-play: the agent plays both colours against itself and is scored against fixed opponents.
+name: c4_alphazero
+task: connect4
+seed: 0
+tracker: mlflow
+device: auto
+env: {}
+train:
+  total_steps: 60000     # plies of self-play
+eval:
+  every_steps: 6000
+  val_games: 20          # fixed random openings; each is played once as first and once as second player
+  test_games: 50
+algo: {name: alphazero, hidden: 256, lr: 1.0e-3, gamma: 1.0, sims: 50, c_puct: 1.5,
+       dirichlet_alpha: 1.0, dirichlet_frac: 0.25, temperature: 1.0, episodes_per_iter: 8,
+       train_steps: 100, batch: 256, buffer: 50000, value_coef: 1.0, value_scale: 1.0}

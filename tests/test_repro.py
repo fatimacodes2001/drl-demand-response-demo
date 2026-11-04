@@ -11,7 +11,9 @@ from dr.fingerprint import fingerprint
 ROOT = Path(__file__).resolve().parents[1]
 
 SMALL = ["train.total_steps=1500", "eval.every_steps=750", "eval.val_days=3", "eval.test_days=3",
-         "device=cpu", "tracker=none", "algo.sims=8", "algo.train_steps=5", "algo.learning_starts=200"]
+         "eval.val_games=2", "eval.test_games=2", "device=cpu", "tracker=none", "algo.sims=8",
+         "algo.train_steps=5", "algo.learning_starts=200"]
+ALGOS = ["dqn", "ppo", "alphazero", "ddpg", "per_ddpg", "connect4_alphazero"]
 
 
 def rows(run_dir):
@@ -43,7 +45,7 @@ def test_env_is_deterministic_and_clone_independent():
     assert oracle(Scenario(7, e.p)) == oracle(Scenario(7, e.p))
 
 
-@pytest.mark.parametrize("algo", ["dqn", "ppo", "alphazero", "ddpg", "per_ddpg"])
+@pytest.mark.parametrize("algo", ALGOS)
 def test_same_seed_same_metrics(algo, tmp_path):
     """Same seed same metrics."""
     r1 = runner.run(cfg_for(algo), tmp_path / "a")
@@ -68,7 +70,7 @@ def test_finished_run_is_skipped(tmp_path):
     assert (tmp_path / "r" / "final.json").stat().st_mtime_ns == t
 
 
-@pytest.mark.parametrize("algo", ["dqn", "ppo", "alphazero", "ddpg", "per_ddpg"])
+@pytest.mark.parametrize("algo", ALGOS)
 def test_resume_is_bit_identical_to_uninterrupted_run(algo, tmp_path):
     """Interrupting at 750 steps and resuming matches one uninterrupted run exactly."""
     straight = runner.run(cfg_for(algo), tmp_path / "a")
