@@ -1,4 +1,5 @@
 name: ppo
+task: dr
 seed: 4
 tracker: mlflow
 device: auto

@@ -1,16 +1,17 @@
 {
-  "return_mean": 1.240473814220459,
-  "return_std": 3.95412005103098,
-  "saving_per_day": 7.86809075517322,
-  "pct_of_oracle_saving": 89.63030814694123,
-  "config_hash": "a35b4455ca1d",
-  "code_hash": "81cd166f09cb",
+  "return_mean": 2.4370784859468544,
+  "return_std": 3.7871991774964666,
+  "saving_per_day": 9.064695426899616,
+  "pct_of_oracle_saving": 94.19384299162036,
+  "config_hash": "6d1389956b21",
+  "code_hash": "94d5797bf190",
   "data_hash": "843f4846704f",
-  "libs": "torch2.15.0+numpy2.5.4",
+  "libs": "torch2.15.0+numpy2.5.4+py3.12.15",
+  "platform": "Darwin-arm64",
   "device": "cpu",
-  "fingerprint": "a24d9c02f3da",
+  "fingerprint": "15e65412ce24",
   "algo": "ddpg",
   "seed": 3,
   "env_steps": 60000,
-  "train_wall_s": 86.4
+  "train_wall_s": 126.1
 }

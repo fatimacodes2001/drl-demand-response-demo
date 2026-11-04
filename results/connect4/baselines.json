@@ -1,0 +1,32 @@
+{
+  "random": {
+    "winrate_random": 48.5,
+    "loss_random": 51.0,
+    "winrate_winblock": 3.5000000000000004,
+    "loss_winblock": 96.5,
+    "raw_winrate_random": 48.5,
+    "raw_loss_random": 51.0,
+    "raw_winrate_winblock": 3.5000000000000004,
+    "raw_loss_winblock": 96.5
+  },
+  "winblock": {
+    "winrate_random": 95.0,
+    "loss_random": 5.0,
+    "winrate_winblock": 47.0,
+    "loss_winblock": 50.0,
+    "raw_winrate_random": 95.0,
+    "raw_loss_random": 5.0,
+    "raw_winrate_winblock": 47.0,
+    "raw_loss_winblock": 50.0
+  },
+  "untrained_search": {
+    "winrate_random": 95.0,
+    "loss_random": 5.0,
+    "raw_winrate_random": 79.0,
+    "raw_loss_random": 21.0,
+    "winrate_winblock": 49.5,
+    "loss_winblock": 48.0,
+    "raw_winrate_winblock": 0.0,
+    "raw_loss_winblock": 100.0
+  }
+}

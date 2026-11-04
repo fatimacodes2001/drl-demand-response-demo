@@ -5,11 +5,11 @@ tracker: mlflow
 device: auto
 env: {}
 train:
-  total_steps: 60000
+  total_steps: 200000
 eval:
-  every_steps: 6000
+  every_steps: 20000
   val_games: 20
-  test_games: 50
+  test_games: 100
 algo:
   name: alphazero
   hidden: 256
@@ -20,6 +20,8 @@ algo:
   dirichlet_alpha: 1.0
   dirichlet_frac: 0.25
   temperature: 1.0
+  temperature_moves: 8
+  augment: true
   episodes_per_iter: 8
   train_steps: 100
   batch: 256

@@ -9,18 +9,24 @@
     "return_mean": -6.28469199346241,
     "return_std": 3.433999062955726,
     "saving_per_day": 0.34292494749035285,
-    "pct_of_oracle_saving": 3.906471045040365
+    "pct_of_oracle_saving": 3.563431217552111
   },
   "random": {
     "return_mean": -12.349624265955619,
     "return_std": 4.725733478169995,
     "saving_per_day": -5.722007325002858,
-    "pct_of_oracle_saving": -65.18293900230564
+    "pct_of_oracle_saving": -59.45901480250468
   },
-  "oracle": {
+  "oracle_discrete": {
     "return_mean": 2.1507649678477283,
     "return_std": 4.1754161015291125,
     "saving_per_day": 8.77838190880049,
+    "pct_of_oracle_saving": 91.21867732966368
+  },
+  "oracle": {
+    "return_mean": 2.995830981971486,
+    "return_std": 3.9295364513566517,
+    "saving_per_day": 9.623447922924248,
     "pct_of_oracle_saving": 100.0
   }
 }

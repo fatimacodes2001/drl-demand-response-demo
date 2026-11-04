@@ -1,4 +1,5 @@
 name: alphazero
+task: dr
 seed: 1
 tracker: mlflow
 device: auto

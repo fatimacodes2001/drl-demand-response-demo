@@ -4,14 +4,14 @@
   "saving_per_day": 9.07926257607095,
   "pct_of_oracle_saving": 94.34521440535902,
   "config_hash": "033b72fd729f",
-  "code_hash": "07955ed0c37d",
+  "code_hash": "94d5797bf190",
   "data_hash": "843f4846704f",
   "libs": "torch2.15.0+numpy2.5.4+py3.12.15",
   "platform": "Darwin-arm64",
   "device": "cpu",
-  "fingerprint": "87aa34d51e5f",
+  "fingerprint": "6b650aca9491",
   "algo": "ddpg",
   "seed": 0,
   "env_steps": 60000,
-  "train_wall_s": 101.9
+  "train_wall_s": 94.6
 }

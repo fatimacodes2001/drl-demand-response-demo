@@ -1,0 +1,21 @@
+{
+  "winrate_random": 96.5,
+  "loss_random": 3.5000000000000004,
+  "raw_winrate_random": 87.5,
+  "raw_loss_random": 12.0,
+  "winrate_winblock": 63.5,
+  "loss_winblock": 31.5,
+  "raw_winrate_winblock": 45.5,
+  "raw_loss_winblock": 51.0,
+  "config_hash": "aad3278fc9ab",
+  "code_hash": "94d5797bf190",
+  "data_hash": "972eda9a19c8",
+  "libs": "torch2.15.0+numpy2.5.4+py3.12.15",
+  "platform": "Darwin-arm64",
+  "device": "cpu",
+  "fingerprint": "695beb98c8d4",
+  "algo": "alphazero",
+  "seed": 0,
+  "env_steps": 200210,
+  "train_wall_s": 559.8
+}
