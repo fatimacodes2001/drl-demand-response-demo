@@ -96,8 +96,9 @@ def _train(cfg, out, device, seed, tracker, fp, resuming, stop_at):
     t0, last_logged = time.time(), [-1]
 
     def log_eval(stats):
-        val = task.evaluate(agent.policy(), "val", prev_policy=prev["weights"])
-        prev["weights"] = agent.policy_state_dict()
+        weights = agent.policy_state_dict()
+        val = task.evaluate(agent.policy(), "val", prev_policy=prev["weights"], weights=weights)
+        prev["weights"] = weights
         row = dict(env_steps=agent.env_steps, wall_s=round(time.time() - t0, 1), **stats,
                    **{f"val_{k}": v for k, v in val.items()})
         with metrics.open("a") as f:
@@ -125,7 +126,7 @@ def _train(cfg, out, device, seed, tracker, fp, resuming, stop_at):
     if agent.env_steps != last_logged[0]:
         log_eval(stats)
 
-    res = task.evaluate(agent.policy(), "test")
+    res = task.evaluate(agent.policy(), "test", weights=agent.policy_state_dict())
     res.update(**fp, algo=cfg["algo"]["name"], seed=seed, env_steps=agent.env_steps,
                train_wall_s=round(time.time() - t0, 1))
     final.write_text(json.dumps(res, indent=2))

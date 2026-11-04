@@ -42,7 +42,7 @@ class DemandResponseTask:
                 h.update(np.asarray(arr, np.float64).tobytes())
         return h.hexdigest()[:12]
 
-    def evaluate(self, policy, split, prev_policy=None):
+    def evaluate(self, policy, split, prev_policy=None, weights=None):
         """Headline metrics of `policy` on the fixed days of `split`."""
         days = self.days(split)
         return ev.summarise(ev.evaluate(policy, days, self.env_cfg), days, self.env_cfg)

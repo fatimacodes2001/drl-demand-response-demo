@@ -6,11 +6,12 @@ tracker: mlflow
 device: auto
 env: {}
 train:
-  total_steps: 60000     # plies of self-play
+  total_steps: 200000    # plies of self-play (about 8000 games)
 eval:
-  every_steps: 6000
+  every_steps: 20000
   val_games: 20          # fixed random openings; each is played once as first and once as second player
-  test_games: 50
+  test_games: 100
 algo: {name: alphazero, hidden: 256, lr: 1.0e-3, gamma: 1.0, sims: 50, c_puct: 1.5,
-       dirichlet_alpha: 1.0, dirichlet_frac: 0.25, temperature: 1.0, episodes_per_iter: 8,
-       train_steps: 100, batch: 256, buffer: 50000, value_coef: 1.0, value_scale: 1.0}
+       dirichlet_alpha: 1.0, dirichlet_frac: 0.25, temperature: 1.0, temperature_moves: 8,
+       augment: true, episodes_per_iter: 8, train_steps: 100, batch: 256, buffer: 50000,
+       value_coef: 1.0, value_scale: 1.0}

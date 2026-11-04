@@ -133,8 +133,12 @@ class AlphaZeroAgent(BaseAgent):
         while not done:
             visits = search(env, net, self.a, self.rng, noise=True)
             pi = visits / visits.sum()
-            w = visits ** (1.0 / self.a["temperature"])
-            act = int(self.rng.choice(len(w), p=w / w.sum()))
+            # sample moves early in the episode for diversity, then play the most visited move
+            if len(rew_l) < self.a.get("temperature_moves", float("inf")):
+                w = visits ** (1.0 / self.a["temperature"])
+                act = int(self.rng.choice(len(w), p=w / w.sum()))
+            else:
+                act = int(visits.argmax())
             obs_l.append(env.obs())
             pi_l.append(pi)
             _, r, done, _ = env.step(act)
@@ -155,9 +159,13 @@ class AlphaZeroAgent(BaseAgent):
         net = NumpyNet(self.net)
         for _ in range(self.a["episodes_per_iter"]):
             self.record(self.self_play(net))
+        augment = getattr(self.task, "augment", None)
         for _ in range(self.a["train_steps"]):
             idx = self.rng.integers(0, self.n, self.a["batch"])
-            o, p, z = (torch.as_tensor(self.B[k][idx], device=self.dev) for k in ("obs", "pi", "z"))
+            o, p, z = self.B["obs"][idx], self.B["pi"][idx], self.B["z"][idx]
+            if augment is not None and self.a.get("augment", False):
+                o, p = augment(o, p, self.rng)
+            o, p, z = (torch.as_tensor(x, device=self.dev) for x in (o, p, z))
             logits, v = self.net(o)
             pl = -(p * F.log_softmax(logits, -1)).sum(-1).mean()
             vl = F.mse_loss(v, z)
