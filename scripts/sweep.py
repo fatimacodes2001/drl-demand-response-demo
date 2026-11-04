@@ -10,7 +10,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from dr import tracking
+from dr import config, tracking
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,6 +25,10 @@ def main():
     p.add_argument("--set", nargs="*", default=[])
     p.add_argument("--force", action="store_true")
     a = p.parse_args()
+
+    names = [config.load(c)["name"] for c in a.configs]
+    if len(set(names)) != len(names):
+        sys.exit(f"config names must be unique, got {names}; runs would overwrite each other")
 
     # create the MLflow database once so parallel runs do not race to initialise it
     tracking.init_store()

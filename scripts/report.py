@@ -20,7 +20,13 @@ def main():
     out = Path(p.parse_args().out)
 
     variants = sorted(d for d in out.iterdir() if d.is_dir() and list(d.glob("seed*/final.json")))
-    cfg0 = yaml.safe_load((variants[0] / "seed0/config.yaml").read_text())
+    cfgs = {d.name: [yaml.safe_load(f.read_text()) for f in sorted(d.glob("seed*/config.yaml"))] for d in variants}
+    cfg0 = cfgs[variants[0].name][0]
+    shared = lambda c: (c["env"], c["eval"]["val_days"], c["eval"]["test_days"], c["train"]["n_train_days"])
+    mismatched = [n for n, cs in cfgs.items() for c in cs if shared(c) != shared(cfg0)]
+    if mismatched:
+        raise SystemExit(f"variants {sorted(set(mismatched))} differ from {variants[0].name} in env or eval settings; "
+                         "baselines and tables would not be comparable")
     days = ev.days_for("test", cfg0["eval"]["test_days"])
     base = ev.baselines(days, cfg0["env"])
     (out / "baselines.json").write_text(json.dumps(base, indent=2))
