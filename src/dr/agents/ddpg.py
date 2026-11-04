@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from ..env import DREnv, OBS_DIM
-from .common import mlp, Replay, PrioritizedReplay
+from .common import BaseAgent, mlp, Replay, PrioritizedReplay
 
 
 class Actor(nn.Module):
@@ -20,15 +20,15 @@ class Actor(nn.Module):
         return torch.tanh(self.net(o))
 
 
-class DDPGAgent:
+class DDPGAgent(BaseAgent):
     """DDPG, or PER-DDPG when `algo.per` is true."""
 
+    nets = ("actor", "critic", "t_actor", "t_critic")
+    opts = ("aopt", "copt")
+
     def __init__(self, cfg, device, seed):
-        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
+        super().__init__(cfg, device, seed)
         a = self.a
-        self.n_days = cfg["train"]["n_train_days"]
-        self.total_steps = cfg["train"]["total_steps"]
-        self.rng = np.random.default_rng(seed)
         self.actor, self.critic = Actor(a["hidden"]).to(device), mlp(OBS_DIM + 1, 1, a["hidden"]).to(device)
         self.t_actor, self.t_critic = copy.deepcopy(self.actor), copy.deepcopy(self.critic)
         self.aopt = torch.optim.Adam(self.actor.parameters(), lr=a["actor_lr"])
@@ -37,7 +37,6 @@ class DDPGAgent:
         self.per = a.get("per", False)
         self.buf = (PrioritizedReplay(a["buffer"], OBS_DIM, extra, a["per_alpha"]) if self.per
                     else Replay(a["buffer"], OBS_DIM, extra))
-        self.env_steps, self.recent = 0, []
 
     def sigma(self):
         """Current std of the Gaussian exploration noise."""
@@ -69,9 +68,13 @@ class DDPGAgent:
         q = self.critic(torch.cat([b["obs"], b["act"]], 1)).squeeze(1)
         td = y - q
         closs = (w * td ** 2).mean()
-        self.copt.zero_grad(); closs.backward(); self.copt.step()
+        self.copt.zero_grad()
+        closs.backward()
+        self.copt.step()
         aloss = -self.critic(torch.cat([b["obs"], self.actor(b["obs"])], 1)).mean()
-        self.aopt.zero_grad(); aloss.backward(); self.aopt.step()
+        self.aopt.zero_grad()
+        aloss.backward()
+        self.aopt.step()
         with torch.no_grad():
             for t, s in ((self.t_actor, self.actor), (self.t_critic, self.critic)):
                 for pt, ps in zip(t.parameters(), s.parameters()):
@@ -83,7 +86,7 @@ class DDPGAgent:
     def train_chunk(self):
         """One episode of noisy interaction with an update per env step."""
         env = DREnv(self.env_cfg)
-        obs, done, ret, loss = env.reset(int(self.rng.integers(self.n_days))), False, 0.0, 0.0
+        obs, done, ret, loss = env.reset(self.sample_day()), False, 0.0, 0.0
         while not done:
             if len(self.buf) < self.a["learning_starts"]:
                 act = float(self.rng.uniform(-1, 1))
@@ -95,18 +98,11 @@ class DDPGAgent:
             self.env_steps += 1
             if len(self.buf) >= self.a["learning_starts"]:
                 loss = self.update()
-        self.recent = (self.recent + [ret])[-20:]
-        return {"train_return": float(np.mean(self.recent)), "sigma": self.sigma(), "critic_loss": loss}
+        self.record(ret)
+        return {"train_return": self.train_return(), "sigma": self.sigma(), "critic_loss": loss}
 
-    def state_dict(self):
-        return dict(actor=self.actor.state_dict(), critic=self.critic.state_dict(),
-                    t_actor=self.t_actor.state_dict(), t_critic=self.t_critic.state_dict(),
-                    aopt=self.aopt.state_dict(), copt=self.copt.state_dict(), buf=self.buf.state(),
-                    env_steps=self.env_steps, rng=self.rng.bit_generator.state)
+    def extra_state(self):
+        return {"buf": self.buf.state()}
 
-    def load_state_dict(self, s):
-        for k in ("actor", "critic", "t_actor", "t_critic"):
-            getattr(self, k).load_state_dict(s[k])
-        self.aopt.load_state_dict(s["aopt"]); self.copt.load_state_dict(s["copt"])
-        self.buf.load(s["buf"]); self.env_steps = s["env_steps"]
-        self.rng.bit_generator.state = s["rng"]
+    def load_extra_state(self, s):
+        self.buf.load(s["buf"])

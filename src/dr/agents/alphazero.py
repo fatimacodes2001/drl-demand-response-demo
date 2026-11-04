@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..env import DREnv, OBS_DIM, N_ACTIONS
+from .common import BaseAgent
 
 
 class AZNet(nn.Module):
@@ -96,19 +97,20 @@ def search(env, net, a, rng, noise):
     return root.N
 
 
-class AlphaZeroAgent:
+class AlphaZeroAgent(BaseAgent):
     """Self-play search plus network training loop."""
 
+    nets = ("net",)
+    opts = ("opt",)
+
     def __init__(self, cfg, device, seed):
-        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
-        self.n_days = cfg["train"]["n_train_days"]
-        self.rng = np.random.default_rng(seed)
+        super().__init__(cfg, device, seed)
         self.net = AZNet(self.a["hidden"]).to(device)
         self.opt = torch.optim.Adam(self.net.parameters(), lr=self.a["lr"])
         cap = self.a["buffer"]
         self.B = dict(obs=np.zeros((cap, OBS_DIM), np.float32), pi=np.zeros((cap, N_ACTIONS), np.float32),
                       z=np.zeros(cap, np.float32))
-        self.n, self.i, self.env_steps, self.iters, self.sims_total, self.recent = 0, 0, 0, 0, 0, []
+        self.n, self.i, self.iters, self.sims_total = 0, 0, 0, 0
 
     def policy(self):
         """Search-based policy `act(env) -> int` using the current network and no exploration noise."""
@@ -118,14 +120,15 @@ class AlphaZeroAgent:
     def self_play(self, net):
         """Play one training day choosing actions from search visit counts; store (state, pi, return)."""
         env = DREnv(self.env_cfg)
-        env.reset(int(self.rng.integers(self.n_days)))
+        env.reset(self.sample_day())
         obs_l, pi_l, rew_l, done = [], [], [], False
         while not done:
             visits = search(env, net, self.a, self.rng, noise=True)
             pi = visits / visits.sum()
             w = visits ** (1.0 / self.a["temperature"])
             act = int(self.rng.choice(N_ACTIONS, p=w / w.sum()))
-            obs_l.append(env.obs()); pi_l.append(pi)
+            obs_l.append(env.obs())
+            pi_l.append(pi)
             _, r, done, _ = env.step(act)
             rew_l.append(r)
             self.sims_total += self.a["sims"]
@@ -142,8 +145,8 @@ class AlphaZeroAgent:
     def train_chunk(self):
         """One AlphaZero iteration: self-play episodes, then gradient steps on the replay."""
         net = NumpyNet(self.net)
-        rets = [self.self_play(net) for _ in range(self.a["episodes_per_iter"])]
-        self.recent = (self.recent + rets)[-20:]
+        for _ in range(self.a["episodes_per_iter"]):
+            self.record(self.self_play(net))
         for _ in range(self.a["train_steps"]):
             idx = self.rng.integers(0, self.n, self.a["batch"])
             o, p, z = (torch.as_tensor(self.B[k][idx], device=self.dev) for k in ("obs", "pi", "z"))
@@ -151,18 +154,18 @@ class AlphaZeroAgent:
             pl = -(p * F.log_softmax(logits, -1)).sum(-1).mean()
             vl = F.mse_loss(v, z)
             loss = pl + self.a["value_coef"] * vl
-            self.opt.zero_grad(); loss.backward(); self.opt.step()
+            self.opt.zero_grad()
+            loss.backward()
+            self.opt.step()
         self.iters += 1
-        return {"train_return": float(np.mean(self.recent)), "policy_loss": pl.item(),
-                "value_loss": vl.item(), "sims_total": self.sims_total}
+        return {"train_return": self.train_return(), "policy_loss": pl.item(), "value_loss": vl.item(),
+                "sims_total": self.sims_total}
 
-    def state_dict(self):
-        return dict(net=self.net.state_dict(), opt=self.opt.state_dict(), B=self.B, n=self.n, i=self.i,
-                    env_steps=self.env_steps, iters=self.iters, sims_total=self.sims_total,
-                    rng=self.rng.bit_generator.state)
+    def extra_state(self):
+        return {"B": {k: v[:self.n].copy() for k, v in self.B.items()}, "n": self.n, "i": self.i,
+                "iters": self.iters, "sims_total": self.sims_total}
 
-    def load_state_dict(self, s):
-        self.net.load_state_dict(s["net"]); self.opt.load_state_dict(s["opt"])
-        self.B, self.n, self.i, self.env_steps = s["B"], s["n"], s["i"], s["env_steps"]
-        self.iters, self.sims_total = s["iters"], s["sims_total"]
-        self.rng.bit_generator.state = s["rng"]
+    def load_extra_state(self, s):
+        for k, v in s["B"].items():
+            self.B[k][:len(v)] = v
+        self.n, self.i, self.iters, self.sims_total = s["n"], s["i"], s["iters"], s["sims_total"]

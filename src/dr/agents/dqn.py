@@ -1,27 +1,27 @@
 """Double DQN with a target network and uniform replay (value-based baseline)."""
 import copy
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
 from ..env import DREnv, OBS_DIM, N_ACTIONS
-from .common import mlp, Replay
+from .common import BaseAgent, mlp, Replay
 
 
-class DQNAgent:
+class DQNAgent(BaseAgent):
     """Double DQN over the five discrete battery actions."""
 
+    nets = ("q", "tq")
+    opts = ("opt",)
+
     def __init__(self, cfg, device, seed):
-        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
-        self.n_days = cfg["train"]["n_train_days"]
-        self.rng = np.random.default_rng(seed)
+        super().__init__(cfg, device, seed)
         self.q = mlp(OBS_DIM, N_ACTIONS, self.a["hidden"]).to(device)
         self.tq = copy.deepcopy(self.q)
         self.opt = torch.optim.Adam(self.q.parameters(), lr=self.a["lr"])
         self.buf = Replay(self.a["buffer"], OBS_DIM,
                           [("next_obs", (OBS_DIM,)), ("act", ()), ("rew", ()), ("done", ())])
-        self.env_steps, self.updates, self.recent = 0, 0, []
+        self.updates = 0
 
     def eps(self):
         """Current epsilon of the linear exploration schedule."""
@@ -61,7 +61,7 @@ class DQNAgent:
     def train_chunk(self):
         """One episode of epsilon-greedy interaction with an update per env step."""
         env = DREnv(self.env_cfg)
-        obs, done, ret, loss = env.reset(int(self.rng.integers(self.n_days))), False, 0.0, 0.0
+        obs, done, ret, loss = env.reset(self.sample_day()), False, 0.0, 0.0
         while not done:
             act = int(self.rng.integers(N_ACTIONS)) if self.rng.random() < self.eps() else self.greedy(obs)
             nobs, r, done, _ = env.step(act)
@@ -70,15 +70,12 @@ class DQNAgent:
             self.env_steps += 1
             if len(self.buf) >= self.a["learning_starts"]:
                 loss = self.update()
-        self.recent = (self.recent + [ret])[-20:]
-        return {"train_return": float(np.mean(self.recent)), "eps": self.eps(), "loss": loss}
+        self.record(ret)
+        return {"train_return": self.train_return(), "eps": self.eps(), "loss": loss}
 
-    def state_dict(self):
-        return dict(q=self.q.state_dict(), tq=self.tq.state_dict(), opt=self.opt.state_dict(),
-                    buf=self.buf.state(), env_steps=self.env_steps, updates=self.updates,
-                    rng=self.rng.bit_generator.state)
+    def extra_state(self):
+        return {"buf": self.buf.state(), "updates": self.updates}
 
-    def load_state_dict(self, s):
-        self.q.load_state_dict(s["q"]); self.tq.load_state_dict(s["tq"]); self.opt.load_state_dict(s["opt"])
-        self.buf.load(s["buf"]); self.env_steps, self.updates = s["env_steps"], s["updates"]
-        self.rng.bit_generator.state = s["rng"]
+    def load_extra_state(self, s):
+        self.buf.load(s["buf"])
+        self.updates = s["updates"]

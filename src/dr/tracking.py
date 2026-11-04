@@ -34,18 +34,22 @@ def flatten(d, prefix=""):
 class Tracker:
     """Logs one run's params, tags, metrics, figures and files; every method is a no-op when disabled."""
 
-    def __init__(self, cfg, fp, run_dir, run_name=None, tags=None):
+    def __init__(self, cfg, fp, run_dir, run_name=None, tags=None, run_id=None):
         self.run_dir = Path(run_dir)
-        self.active = False
+        self.active, self.run_id = False, None
         if cfg.get("tracker", "mlflow") != "mlflow" or mlflow is None:
             return
         try:
             init_store(cfg.get("experiment", DEFAULT_EXPERIMENT))
-            mlflow.start_run(run_name=run_name or f"{cfg['name']}-seed{cfg['seed']}-{fp['fingerprint'][:6]}")
-            mlflow.log_params(dict(flatten(cfg)))
+            if run_id:
+                # a resumed training run continues its original MLflow run
+                run = mlflow.start_run(run_id=run_id)
+            else:
+                run = mlflow.start_run(run_name=run_name or f"{cfg['name']}-seed{cfg['seed']}-{fp['fingerprint'][:6]}")
+                mlflow.log_params(dict(flatten(cfg)))
             mlflow.set_tags({**fp, "algo": cfg["algo"]["name"], "variant": cfg["name"],
                              "seed": cfg["seed"], **(tags or {})})
-            self.active = True
+            self.active, self.run_id = True, run.info.run_id
         except Exception as e:
             print(f"[WARN] MLflow tracking failed, this run is NOT logged: {e!r}", flush=True)
 
@@ -70,6 +74,12 @@ class Tracker:
         if self.active:
             for p in paths:
                 mlflow.log_artifact(str(p), subdir)
+
+    def abort(self):
+        """Close the MLflow run as FAILED after an exception so the next run in this process can start."""
+        if self.active:
+            mlflow.end_run(status="FAILED")
+            self.active = False
 
     def finish(self, final=None):
         """Log final metrics (prefixed `test_`) and close the MLflow run."""

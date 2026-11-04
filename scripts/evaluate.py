@@ -23,7 +23,7 @@ def main():
     cfg = yaml.safe_load((run / "config.yaml").read_text())
     seed_everything(cfg["seed"])
     agent = AGENTS[cfg["algo"]["name"]](cfg, "cpu", cfg["seed"])
-    agent.load_state_dict(torch.load(run / "final.pt", weights_only=False))
+    agent.load_policy_state_dict(torch.load(run / "final.pt", weights_only=True))
     pol = agent.policy()
 
     days = ev.days_for("test", cfg["eval"]["test_days"])

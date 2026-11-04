@@ -137,9 +137,70 @@ class PrioritizedReplay(Replay):
         self.max_pri = max(self.max_pri, float(td_abs.max()))
 
     def state(self):
-        return {**super().state(), "pri": self.pri[:self.n].copy(), "max_pri": self.max_pri}
+        # the tree is stored as built so a resumed run sums floats in the same order as the original
+        return {**super().state(), "pri": self.pri.copy(), "tree": self.tree.tree.copy(), "max_pri": self.max_pri}
 
     def load(self, s):
         super().load(s)
-        self.max_pri = s["max_pri"]
-        self._set(np.arange(len(s["pri"])), s["pri"])
+        self.pri[:], self.tree.tree[:], self.max_pri = s["pri"], s["tree"], s["max_pri"]
+
+
+class BaseAgent:
+    """Shared plumbing: RNG, step counters, recent returns and complete checkpoints.
+
+    Subclasses list their networks in `nets` and optimisers in `opts` (attribute names), and put any
+    other learning state (replay buffers, env states) in `extra_state` / `load_extra_state`.
+    """
+
+    nets = ()
+    opts = ()
+
+    def __init__(self, cfg, device, seed):
+        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
+        self.n_days, self.total_steps = cfg["train"]["n_train_days"], cfg["train"]["total_steps"]
+        self.rng = np.random.default_rng(seed)
+        self.env_steps, self.recent = 0, []
+
+    def sample_day(self):
+        return int(self.rng.integers(self.n_days))
+
+    def record(self, episode_return):
+        """Keep the last 20 training returns for the train_return metric."""
+        self.recent = (self.recent + [float(episode_return)])[-20:]
+
+    def train_return(self):
+        return float(np.mean(self.recent)) if self.recent else float("nan")
+
+    def policy_state_dict(self):
+        """Network weights only; enough to act, small enough to commit."""
+        return {n: getattr(self, n).state_dict() for n in self.nets}
+
+    def load_policy_state_dict(self, s):
+        for n in self.nets:
+            getattr(self, n).load_state_dict(s[n])
+
+    def extra_state(self):
+        return {}
+
+    def load_extra_state(self, s):
+        pass
+
+    def state_dict(self):
+        """Everything needed to continue training exactly, including every RNG stream."""
+        s = dict(nets=self.policy_state_dict(), opts={n: getattr(self, n).state_dict() for n in self.opts},
+                 env_steps=self.env_steps, recent=list(self.recent), rng=self.rng.bit_generator.state,
+                 torch_rng=torch.get_rng_state(), extra=self.extra_state())
+        if self.dev == "cuda":
+            s["cuda_rng"] = torch.cuda.get_rng_state()
+        return s
+
+    def load_state_dict(self, s):
+        self.load_policy_state_dict(s["nets"])
+        for n in self.opts:
+            getattr(self, n).load_state_dict(s["opts"][n])
+        self.env_steps, self.recent = s["env_steps"], list(s["recent"])
+        self.rng.bit_generator.state = s["rng"]
+        torch.set_rng_state(s["torch_rng"])
+        if "cuda_rng" in s and self.dev == "cuda":
+            torch.cuda.set_rng_state(s["cuda_rng"])
+        self.load_extra_state(s["extra"])

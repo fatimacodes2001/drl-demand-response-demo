@@ -56,11 +56,25 @@ def run(cfg, out_dir, resume=False, force=False):
     meta = _meta(fp, device)
     (out / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
     (out / "meta.json").write_text(json.dumps(meta, indent=2))
-    tracker = Tracker(cfg, fp, out, tags={"git_sha": meta["git_sha"], "git_dirty": str(meta["git_dirty"])})
+    ckpt, metrics, run_id_file = out / "ckpt.pt", out / "metrics.jsonl", out / "mlflow_run_id"
+    resuming = resume and ckpt.exists()
+    tracker = Tracker(cfg, fp, out, tags={"git_sha": meta["git_sha"], "git_dirty": str(meta["git_dirty"])},
+                      run_id=run_id_file.read_text().strip() if resuming and run_id_file.exists() else None)
+    if tracker.run_id:
+        run_id_file.write_text(tracker.run_id)
+    try:
+        return _train(cfg, out, device, seed, tracker, fp, resuming)
+    except BaseException:
+        tracker.abort()
+        raise
 
+
+def _train(cfg, out, device, seed, tracker, fp, resuming):
+    """Training loop body; see `run`."""
+    ckpt, metrics, final = out / "ckpt.pt", out / "metrics.jsonl", out / "final.json"
+    # the checkpoint holds numpy arrays and RNG states, so it is loaded as a trusted local file
     agent = AGENTS[cfg["algo"]["name"]](cfg, device, seed)
-    ckpt, metrics = out / "ckpt.pt", out / "metrics.jsonl"
-    if resume and ckpt.exists():
+    if resuming:
         agent.load_state_dict(torch.load(ckpt, weights_only=False))
         print(f"[resume] from env_steps={agent.env_steps}")
     else:
@@ -85,7 +99,8 @@ def run(cfg, out_dir, resume=False, force=False):
         last_logged[0] = agent.env_steps
 
     # the first evaluation is the untrained "before" policy
-    log_eval({})
+    if not resuming:
+        log_eval({})
     stats = {}
     while agent.env_steps < total:
         stats = agent.train_chunk()
@@ -100,7 +115,7 @@ def run(cfg, out_dir, resume=False, force=False):
     res.update(**fp, algo=cfg["algo"]["name"], seed=seed, env_steps=agent.env_steps,
                train_wall_s=round(time.time() - t0, 1))
     final.write_text(json.dumps(res, indent=2))
-    torch.save(agent.state_dict(), out / "final.pt")
+    torch.save(agent.policy_state_dict(), out / "final.pt")
 
     rows = [json.loads(line) for line in metrics.read_text().splitlines()]
     ref = {"rule_based": ev.summarise(ev.evaluate(ev.rule_based, val_days, cfg["env"]), val_days,

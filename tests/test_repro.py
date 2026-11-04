@@ -14,6 +14,12 @@ SMALL = ["train.total_steps=1500", "eval.every_steps=750", "eval.val_days=3", "e
          "device=cpu", "tracker=none", "algo.sims=8", "algo.train_steps=5", "algo.learning_starts=200"]
 
 
+def rows(run_dir):
+    """Metric rows of a run without the wall-clock field."""
+    return [{k: v for k, v in json.loads(line).items() if k != "wall_s"}
+            for line in (run_dir / "metrics.jsonl").read_text().splitlines()]
+
+
 def cfg_for(name, seed=0):
     """A tiny, CPU-only, untracked version of a shipped config."""
     c = config.load(ROOT / f"configs/{name}.yaml", SMALL)
@@ -42,8 +48,7 @@ def test_same_seed_same_metrics(algo, tmp_path):
     """Same seed same metrics."""
     r1 = runner.run(cfg_for(algo), tmp_path / "a")
     r2 = runner.run(cfg_for(algo), tmp_path / "b")
-    m = lambda d: [{k: v for k, v in json.loads(l).items() if k != "wall_s"} for l in (d / "metrics.jsonl").read_text().splitlines()]
-    assert m(tmp_path / "a") == m(tmp_path / "b")
+    assert rows(tmp_path / "a") == rows(tmp_path / "b")
     assert r1["return_mean"] == r2["return_mean"]
 
 
@@ -54,19 +59,25 @@ def test_different_seed_differs(tmp_path):
     assert a["return_mean"] != b["return_mean"]
 
 
-def test_finished_run_is_skipped_and_resume_continues(tmp_path):
-    """Finished run is skipped and resume continues."""
+def test_finished_run_is_skipped(tmp_path):
+    """A second call with an identical fingerprint does not retrain."""
     c = cfg_for("dqn")
     runner.run(c, tmp_path / "r")
     t = (tmp_path / "r" / "final.json").stat().st_mtime_ns
-    # identical fingerprint: skipped
     runner.run(c, tmp_path / "r")
     assert (tmp_path / "r" / "final.json").stat().st_mtime_ns == t
-    c2 = cfg_for("dqn"); c2["train"]["total_steps"] = 2500
-    # larger budget plus resume: continues from the checkpoint
-    runner.run(c2, tmp_path / "r", resume=True)
-    rows = [json.loads(l) for l in (tmp_path / "r" / "metrics.jsonl").read_text().splitlines()]
-    assert rows[-1]["env_steps"] >= 2500 and rows[0]["env_steps"] == 0 and len(rows) > 3
+
+
+@pytest.mark.parametrize("algo", ["dqn", "ppo", "alphazero", "ddpg", "per_ddpg"])
+def test_resume_is_bit_identical_to_uninterrupted_run(algo, tmp_path):
+    """Training to 750 steps, then resuming to 1500, matches one straight run to 1500 exactly."""
+    straight = runner.run(cfg_for(algo), tmp_path / "a")
+    short = cfg_for(algo)
+    short["train"]["total_steps"] = 750
+    runner.run(short, tmp_path / "b")
+    resumed = runner.run(cfg_for(algo), tmp_path / "b", resume=True)
+    assert resumed["return_mean"] == straight["return_mean"]
+    assert rows(tmp_path / "a") == rows(tmp_path / "b")
 
 
 def test_fingerprint_tracks_config_code_and_data():

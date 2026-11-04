@@ -3,25 +3,25 @@ import numpy as np
 import torch
 
 from ..env import DREnv, OBS_DIM, N_ACTIONS
-from .common import mlp
+from .common import BaseAgent, mlp
 
 
-class PPOAgent:
+class PPOAgent(BaseAgent):
     """Actor-critic PPO over the five discrete battery actions."""
 
+    nets = ("pi", "vf")
+    opts = ("opt",)
+
     def __init__(self, cfg, device, seed):
-        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
-        self.n_days = cfg["train"]["n_train_days"]
-        self.rng = np.random.default_rng(seed)
-        self.gen = torch.Generator(device=device).manual_seed(seed)
+        super().__init__(cfg, device, seed)
         h = self.a["hidden"]
+        self.gen = torch.Generator(device=device).manual_seed(seed)
         self.pi = mlp(OBS_DIM, N_ACTIONS, h).to(device)
         self.vf = mlp(OBS_DIM, 1, h).to(device)
         self.opt = torch.optim.Adam([*self.pi.parameters(), *self.vf.parameters()], lr=self.a["lr"])
         self.envs = [DREnv(self.env_cfg) for _ in range(self.a["n_envs"])]
-        self.obs = np.stack([e.reset(int(self.rng.integers(self.n_days))) for e in self.envs])
+        self.obs = np.stack([e.reset(self.sample_day()) for e in self.envs])
         self.ep_ret = np.zeros(len(self.envs))
-        self.env_steps, self.recent = 0, []
 
     def policy(self):
         """Greedy policy `act(env) -> int`."""
@@ -34,9 +34,10 @@ class PPOAgent:
         """Collect one rollout from all envs, then run several clipped-surrogate epochs on it."""
         a, dev, n = self.a, self.dev, len(self.envs)
         T = a["rollout_len"]
-        O = torch.zeros(T, n, OBS_DIM, device=dev); A = torch.zeros(T, n, dtype=torch.long, device=dev)
-        LP = torch.zeros(T, n, device=dev); R = torch.zeros(T, n, device=dev)
-        D = torch.zeros(T, n, device=dev); V = torch.zeros(T + 1, n, device=dev)
+        O = torch.zeros(T, n, OBS_DIM, device=dev)
+        A = torch.zeros(T, n, dtype=torch.long, device=dev)
+        LP, R, D = (torch.zeros(T, n, device=dev) for _ in range(3))
+        V = torch.zeros(T + 1, n, device=dev)
         for t in range(T):
             o = torch.as_tensor(self.obs, device=dev)
             with torch.no_grad():
@@ -49,9 +50,9 @@ class PPOAgent:
                 rew[i], done[i] = r, d
                 self.ep_ret[i] += r
                 if d:
-                    self.recent = (self.recent + [self.ep_ret[i]])[-20:]
+                    self.record(self.ep_ret[i])
                     self.ep_ret[i] = 0.0
-                    ob = e.reset(int(self.rng.integers(self.n_days)))
+                    ob = e.reset(self.sample_day())
                 self.obs[i] = ob
             R[t] = torch.as_tensor(rew * a["reward_scale"], dtype=torch.float32, device=dev)
             D[t] = torch.as_tensor(done, dtype=torch.float32, device=dev)
@@ -82,14 +83,14 @@ class PPOAgent:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_([*self.pi.parameters(), *self.vf.parameters()], 0.5)
                 self.opt.step()
-        return {"train_return": float(np.mean(self.recent)) if self.recent else float("nan"),
-                "policy_loss": pl.item(), "value_loss": vl.item()}
+        return {"train_return": self.train_return(), "policy_loss": pl.item(), "value_loss": vl.item()}
 
-    def state_dict(self):
-        return dict(pi=self.pi.state_dict(), vf=self.vf.state_dict(), opt=self.opt.state_dict(),
-                    env_steps=self.env_steps, rng=self.rng.bit_generator.state)
+    def extra_state(self):
+        return {"gen": self.gen.get_state(), "envs": [e.get_state() for e in self.envs],
+                "obs": self.obs.copy(), "ep_ret": self.ep_ret.copy()}
 
-    def load_state_dict(self, s):
-        self.pi.load_state_dict(s["pi"]); self.vf.load_state_dict(s["vf"]); self.opt.load_state_dict(s["opt"])
-        self.env_steps = s["env_steps"]
-        self.rng.bit_generator.state = s["rng"]
+    def load_extra_state(self, s):
+        self.gen.set_state(s["gen"])
+        for e, st in zip(self.envs, s["envs"]):
+            e.set_state(st)
+        self.obs, self.ep_ret = s["obs"].copy(), s["ep_ret"].copy()
