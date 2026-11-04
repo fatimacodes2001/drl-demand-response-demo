@@ -36,11 +36,13 @@ def _meta(fp, device):
                 started=time.strftime("%Y-%m-%dT%H:%M:%S"))
 
 
-def run(cfg, out_dir, resume=False, force=False):
+def run(cfg, out_dir, resume=False, force=False, stop_at=None):
     """Train one (config, seed), evaluate on val during training and on test at the end.
 
     A finished run with the same fingerprint is skipped unless `force` is set. With `resume`, training
-    continues from the saved checkpoint.
+    continues from the saved checkpoint. `stop_at` interrupts after that many env steps (checkpoint
+    written, no final evaluation, returns None) so an interruption can be simulated without changing
+    the config.
     """
     out = Path(out_dir)
     device = get_device(cfg["device"])
@@ -63,13 +65,13 @@ def run(cfg, out_dir, resume=False, force=False):
     if tracker.run_id:
         run_id_file.write_text(tracker.run_id)
     try:
-        return _train(cfg, out, device, seed, tracker, fp, resuming)
+        return _train(cfg, out, device, seed, tracker, fp, resuming, stop_at)
     except BaseException:
         tracker.abort()
         raise
 
 
-def _train(cfg, out, device, seed, tracker, fp, resuming):
+def _train(cfg, out, device, seed, tracker, fp, resuming, stop_at):
     """Training loop body; see `run`."""
     ckpt, metrics, final = out / "ckpt.pt", out / "metrics.jsonl", out / "final.json"
     # the checkpoint holds numpy arrays and RNG states, so it is loaded as a trusted local file
@@ -107,6 +109,11 @@ def _train(cfg, out, device, seed, tracker, fp, resuming):
         if agent.env_steps >= next_eval:
             log_eval(stats)
             next_eval += ecfg["every_steps"]
+        if stop_at is not None and agent.env_steps >= stop_at:
+            torch.save(agent.state_dict(), ckpt)
+            print(f"[stop] interrupted at env_steps={agent.env_steps}, checkpoint written")
+            tracker.finish()
+            return None
     if agent.env_steps != last_logged[0]:
         log_eval(stats)
 

@@ -70,11 +70,9 @@ def test_finished_run_is_skipped(tmp_path):
 
 @pytest.mark.parametrize("algo", ["dqn", "ppo", "alphazero", "ddpg", "per_ddpg"])
 def test_resume_is_bit_identical_to_uninterrupted_run(algo, tmp_path):
-    """Training to 750 steps, then resuming to 1500, matches one straight run to 1500 exactly."""
+    """Interrupting at 750 steps and resuming matches one uninterrupted run exactly."""
     straight = runner.run(cfg_for(algo), tmp_path / "a")
-    short = cfg_for(algo)
-    short["train"]["total_steps"] = 750
-    runner.run(short, tmp_path / "b")
+    assert runner.run(cfg_for(algo), tmp_path / "b", stop_at=750) is None
     resumed = runner.run(cfg_for(algo), tmp_path / "b", resume=True)
     assert resumed["return_mean"] == straight["return_mean"]
     assert rows(tmp_path / "a") == rows(tmp_path / "b")

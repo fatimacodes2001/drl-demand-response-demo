@@ -16,6 +16,7 @@ def main():
     p.add_argument("--out", default=str(ROOT / "results"))
     p.add_argument("--resume", action="store_true")
     p.add_argument("--force", action="store_true", help="re-run even if finished with an identical fingerprint")
+    p.add_argument("--stop-at", type=int, default=None, help="interrupt after this many env steps (for resume demos)")
     a = p.parse_args()
 
     cfg = config.load(a.config, a.set)
@@ -23,7 +24,8 @@ def main():
         cfg["seed"] = a.seed
     if a.device:
         cfg["device"] = a.device
-    runner.run(cfg, Path(a.out) / cfg["name"] / f"seed{cfg['seed']}", resume=a.resume, force=a.force)
+    runner.run(cfg, Path(a.out) / cfg["name"] / f"seed{cfg['seed']}", resume=a.resume, force=a.force,
+               stop_at=a.stop_at)
 
 
 if __name__ == "__main__":
