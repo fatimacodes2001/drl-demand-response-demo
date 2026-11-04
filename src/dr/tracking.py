@@ -79,14 +79,15 @@ class Tracker:
             self.active = False
 
 
-def log_report(name, kind, metrics=None, figures=None, files=(), experiment=DEFAULT_EXPERIMENT, out_dir=None):
-    """Log a sweep-level or benchmark report as its own MLflow run; returns False if tracking is unavailable."""
-    if mlflow is None or os.environ.get("DR_TRACKER") == "none":
+def log_report(name, kind, metrics=None, figures=None, files=(), tracker="mlflow",
+               experiment=DEFAULT_EXPERIMENT, out_dir=None):
+    """Log a sweep-level or benchmark report as its own MLflow run; returns False if tracking is off."""
+    if mlflow is None or tracker != "mlflow":
         return False
     try:
         init_store(experiment)
         with mlflow.start_run(run_name=name):
-            mlflow.set_tag("kind", kind)
+            mlflow.set_tags({"kind": kind, "out_dir": str(out_dir or ROOT / "results")})
             mlflow.log_metrics(metrics or {})
             for fname, fig in (figures or {}).items():
                 path = Path(out_dir or ROOT / "results") / fname

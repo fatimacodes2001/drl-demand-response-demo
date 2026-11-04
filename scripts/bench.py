@@ -53,6 +53,7 @@ def bench(dev, hidden, batch, layers, iters):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--profile", action="store_true")
+    p.add_argument("--no-track", action="store_true", help="do not log to MLflow")
     p.add_argument("--iters", type=int, default=200)
     a = p.parse_args()
     out = ROOT / "results"
@@ -78,7 +79,8 @@ def main():
         print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=8))
         files.append(out / "bench_trace.json")
 
-    tracking.log_report("bench", "bench", figures={"bench.png": plotting.bench(rows)}, files=files, out_dir=out)
+    tracking.log_report("bench", "bench", figures={"bench.png": plotting.bench(rows)}, files=files,
+                        tracker="none" if a.no_track else "mlflow", out_dir=out)
 
 
 if __name__ == "__main__":

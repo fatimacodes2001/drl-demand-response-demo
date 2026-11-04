@@ -56,8 +56,9 @@ def main():
     summary = out / "summary.md"
     summary.write_text(f"Held-out test days ({len(days)}), mean ± sample std across seeds.\n\n" + "\n".join(table) + "\n")
     print(summary.read_text())
-    tracking.log_report("summary", "summary", metrics, {"learning_curves.png": fig},
-                        [summary, out / "baselines.json"], out_dir=out)
+    tracking.log_report(f"summary:{out.name}", "summary", metrics, {"learning_curves.png": fig},
+                        [summary, out / "baselines.json"], tracker=cfg0.get("tracker", "mlflow"),
+                        experiment=cfg0.get("experiment", tracking.DEFAULT_EXPERIMENT), out_dir=out)
 
 
 if __name__ == "__main__":
