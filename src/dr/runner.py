@@ -16,11 +16,13 @@ from .fingerprint import fingerprint
 from .tracking import Tracker
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
 def _git(*args):
-    """Output of a git command in the package directory, or None outside a repository."""
+    """Output of a git command at the repository root, or None outside a repository."""
     try:
-        return subprocess.check_output(["git", *args], stderr=subprocess.DEVNULL,
-                                       cwd=Path(__file__).parent).decode().strip()
+        return subprocess.check_output(["git", *args], stderr=subprocess.DEVNULL, cwd=ROOT).decode().strip()
     except Exception:
         return None
 
@@ -28,7 +30,7 @@ def _git(*args):
 def _meta(fp, device):
     """Provenance record written next to every run."""
     return dict(**fp, git_sha=_git("rev-parse", "HEAD") or "unknown",
-                git_dirty=bool(_git("status", "--porcelain", "--", "src", "configs")),
+                git_dirty=bool(_git("status", "--porcelain", "--", "src", "configs", "scripts")),
                 python=platform.python_version(), host=platform.node(),
                 gpu=torch.cuda.get_device_name(0) if device == "cuda" else None,
                 started=time.strftime("%Y-%m-%dT%H:%M:%S"))
