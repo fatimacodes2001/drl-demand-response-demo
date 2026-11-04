@@ -26,11 +26,12 @@ from an employer, a client or a research partner.
 5. [Where the runs go](#5-where-the-runs-go)
 6. [Configs](#6-configs)
 7. [How reproducibility works, and where it stops](#7-how-reproducibility-works-and-where-it-stops)
-8. [Results: battery](#8-results-battery)
-9. [Results: Connect Four](#9-results-connect-four)
-10. [GPU](#10-gpu)
-11. [Layout](#11-layout)
-12. [Known limits](#12-known-limits)
+8. [How I measure, in pictures](#8-how-i-measure-in-pictures)
+9. [Results: battery](#9-results-battery)
+10. [Results: Connect Four](#10-results-connect-four)
+11. [GPU](#11-gpu)
+12. [Layout](#12-layout)
+13. [Known limits](#13-known-limits)
 
 ## 1. The two tasks
 
@@ -223,7 +224,70 @@ validation openings; the test openings were used once, for the table.
 Not done yet: CUDA. Deterministic mode is requested but I have not run on a GPU here. `make bench` and
 `make verify --tol` on a GPU box are the first things I would do there.
 
-## 8. Results: battery
+## 8. How I measure, in pictures
+
+Every figure below is produced by the code in this repo from the runs committed under `results/`, and each one
+is also attached to its MLflow run. These are the plots I look at before I believe a number.
+
+### One run: did it learn, and when?
+
+![training curve of one DQN run](results/dqn/seed0/plots/training_curve.png)
+
+`results/<variant>/seed<k>/plots/training_curve.png`. Left: the validation score at every evaluation, on ten
+days the agent never trains on, with the rule-based heuristic and the idle battery as dashed lines. The first
+point is the untrained network, so the "before" is always on the chart. Right: the mean return of the last 20
+training episodes. If the right side climbs and the left side does not, the agent is fitting its training days
+and I do not trust it.
+
+### All runs: is it the algorithm or the seed?
+
+![learning curves of all five battery agents, mean and spread over seeds](results/learning_curves.png)
+
+`results/learning_curves.png`. One line per algorithm, mean over five seeds, shaded band one sample standard
+deviation, log scale on steps. This is the plot that stopped me reporting PPO at 75% from one seed; the band
+told me the spread was 14 points, and the fix (every agent sees the whole day) brought it to 87 ± 0.8. Lines
+that cross the dotted heuristic early and bands that narrow as training goes on are what I want to see. The
+x-axis is environment steps, so the search agent's 64 simulations per step are not counted; the curves are not
+matched compute.
+
+### The policy itself: what does it do all day?
+
+![battery schedule of the trained DQN policy against the oracle on one test day](results/dqn/seed0/plots/dispatch_day20000.png)
+
+`results/<variant>/seed<k>/plots/dispatch_day<N>.png`. Top: the price, with red markers on the FCAS events.
+Middle: household load and solar. Bottom: state of charge over the day for the trained policy and for the
+dynamic-programming oracle. A good policy charges before the price spikes and the evening peak, discharges into
+them and into the events, and ends the day where it started. When the two curves part ways I can point at the
+half hour where the policy left money on the table. A table of percentages does not tell me that.
+
+### Connect Four: is the network learning, or is the search carrying it?
+
+![win rate against the heuristic over self-play training, five seeds](results/connect4/learning_curves.png)
+
+`results/connect4/learning_curves.png`. Win rate against the win-or-block heuristic on 20 held-out openings,
+played as both colours, mean and spread over five seeds. The dashed line is the same search with an untrained
+network, which already wins about 58% because 50 simulations find immediate wins and blocks by themselves. The
+curve has to clear that line, not the 50% line, before training gets any credit. In the per-run metrics there
+are two more columns I watch: `val_winrate_prev`, the current weights against the previous evaluation's weights
+(above 50 means the last 20k plies helped), and `val_raw_winrate_winblock`, the network with no search at all,
+which starts at 0 and ends near 46.
+
+![final position of one game, trained agent against the heuristic](results/connect4/c4_alphazero/seed0/plots/sample_game.png)
+
+`results/connect4/c4_alphazero/seed0/plots/sample_game.png`. One test game, agent in yellow, heuristic in red,
+move numbers on the discs. I keep this because a win rate hides how a game was lost; here the heuristic won, and
+you can trace which move let it.
+
+### Hardware: when does a GPU pay for itself?
+
+![learner updates per second on CPU and accelerator across network and batch sizes](results/bench.png)
+
+`results/bench.png`, from `make bench`. Updates per second against batch size, one panel per network size, one
+line per device. For the small networks these agents use, the CPU wins at batch 128 and the accelerator only
+pulls ahead at large batches or deeper networks. I measure this before I claim a speedup, and I will re-run it on
+a CUDA machine before saying anything about CUDA.
+
+## 9. Results: battery
 
 Five seeds, 50 held-out test days, one CPU core per run on an Apple M4 Pro, mean ± sample standard deviation.
 This table is what `make sweep` produced at this commit, and `make verify` on any of those runs reproduces it.
@@ -247,7 +311,7 @@ exact model already works, and training takes it to 82; its step count ignores t
 budgets and evaluation cadences differ per algorithm, so the curves in `results/learning_curves.png` are not
 matched-compute comparisons.
 
-## 9. Results: Connect Four
+## 10. Results: Connect Four
 
 Five seeds. 100 held-out openings, each played as both colours, so 200 games per opponent. 200k self-play plies
 per seed, about 8000 games, 560 s each on one core. From `make sweep-c4` at this commit.
@@ -269,7 +333,7 @@ against the heuristic goes from about 58% to 72% over the run and does nothing f
 For scale: untrained search with 200 simulations already wins 79% and loses 16%. At this size, more search is
 still the cheaper way to get stronger. What this shows is a self-play loop that works and is measured properly.
 
-## 10. GPU
+## 11. GPU
 
 The networks are small and both the environment stepping and the tree search are Python on the CPU, so at these
 sizes a GPU does not make training faster. `make bench` measures learner-update throughput across network and
@@ -285,7 +349,7 @@ CUDA not measured yet):
 On a CUDA machine, `make bench` (with `PROFILE=1` for a profiler trace) and `--device cuda` for training. Replay
 sampling, networks and updates move to the device; environments and search stay on the CPU.
 
-## 11. Layout
+## 12. Layout
 
 ```
 configs/            base.yaml, dqn, ppo, ddpg, per_ddpg, alphazero (battery); connect4_alphazero
@@ -303,7 +367,7 @@ tests/              determinism, resume, fingerprint, replay, config, Connect Fo
 .github/workflows/  CI on Linux        Makefile  Dockerfile  pyproject.toml  requirements.txt
 ```
 
-## 12. Known limits
+## 13. Known limits
 
 The battery task has perfect day-ahead information. The real problem has forecast error, and neither the oracle
 nor the agents face it here.
