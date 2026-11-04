@@ -27,6 +27,7 @@ class DDPGAgent:
         self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
         a = self.a
         self.n_days = cfg["train"]["n_train_days"]
+        self.total_steps = cfg["train"]["total_steps"]
         self.rng = np.random.default_rng(seed)
         self.actor, self.critic = Actor(a["hidden"]).to(device), mlp(OBS_DIM + 1, 1, a["hidden"]).to(device)
         self.t_actor, self.t_critic = copy.deepcopy(self.actor), copy.deepcopy(self.critic)
@@ -57,7 +58,7 @@ class DDPGAgent:
         """One critic and actor step (importance-weighted when PER is on), then soft target updates."""
         a = self.a
         if self.per:
-            beta = a["per_beta_start"] + min(self.env_steps / a["train_total"], 1.0) * (1 - a["per_beta_start"])
+            beta = a["per_beta_start"] + min(self.env_steps / self.total_steps, 1.0) * (1 - a["per_beta_start"])
             b = self.buf.sample(self.rng, a["batch"], self.dev, beta)
         else:
             b = self.buf.sample(self.rng, a["batch"], self.dev)
