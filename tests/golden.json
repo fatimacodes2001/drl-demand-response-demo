@@ -1,0 +1,44 @@
+{
+  "dqn": {
+    "return_mean": -8.016862149035385,
+    "return_std": 0.8433889733631544,
+    "saving_per_day": -1.8211526388754091,
+    "pct_of_oracle_saving": -17.643740676071346,
+    "code_hash": "b236cd526d80"
+  },
+  "ppo": {
+    "return_mean": -6.40183115491859,
+    "return_std": 0.6165236272023064,
+    "saving_per_day": -0.20612164475861464,
+    "pct_of_oracle_saving": -1.9969533416441427,
+    "code_hash": "b236cd526d80"
+  },
+  "ddpg": {
+    "return_mean": -7.332053394056483,
+    "return_std": 0.8392650466290541,
+    "saving_per_day": -1.136343883896507,
+    "pct_of_oracle_saving": -11.009157814849882,
+    "code_hash": "b236cd526d80"
+  },
+  "per_ddpg": {
+    "return_mean": -8.016862149035385,
+    "return_std": 0.8433889733631544,
+    "saving_per_day": -1.8211526388754091,
+    "pct_of_oracle_saving": -17.643740676071346,
+    "code_hash": "b236cd526d80"
+  },
+  "alphazero": {
+    "return_mean": -4.912505050410525,
+    "return_std": 1.3543312061890473,
+    "saving_per_day": 1.2832044597494503,
+    "pct_of_oracle_saving": 12.43197645211025,
+    "code_hash": "b236cd526d80"
+  },
+  "connect4_alphazero": {
+    "winrate_random": 75.0,
+    "loss_random": 25.0,
+    "winrate_winblock": 25.0,
+    "loss_winblock": 75.0,
+    "code_hash": "b236cd526d80"
+  }
+}

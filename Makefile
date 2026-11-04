@@ -24,6 +24,9 @@ sweep-c4:        ## Connect Four self-play x 5 seeds -> results/connect4/summary
 verify:          ## re-run a recorded run and check it reproduces: make verify RUN=results/dqn/seed0
 	$(PY) scripts/verify.py --run $(RUN)
 
+golden:          ## refresh tests/golden.json after an intended change to results
+	$(PY) scripts/golden.py
+
 ui:              ## browse runs, plots and artifacts in MLflow
 	$(PY) -m mlflow ui --backend-store-uri sqlite:///mlflow.db
 
