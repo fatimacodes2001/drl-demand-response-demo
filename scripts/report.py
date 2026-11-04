@@ -32,7 +32,7 @@ def main():
     (out / "baselines.json").write_text(json.dumps(base, indent=2))
 
     rows = [("method", "seeds", "test saving $/day", "% of oracle saving", "env steps", "train wall (s)")]
-    for k in ("no_control", "random", "rule_based"):
+    for k in ("no_control", "random", "rule_based", "oracle_discrete"):
         b = base[k]
         rows.append((k, "-", f"{b['saving_per_day']:.2f}", f"{b['pct_of_oracle_saving']:.1f}", "-", "-"))
     curves, metrics = {}, {}

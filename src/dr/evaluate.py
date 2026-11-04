@@ -51,10 +51,10 @@ def random_policy(seed):
     return lambda env: int(rng.integers(N_ACTIONS))
 
 
-def oracle_returns(days, env_cfg):
-    """Per-day optimal returns from dynamic programming."""
+def oracle_returns(days, env_cfg, sub=10):
+    """Per-day optimal returns from dynamic programming on a grid `sub` times finer than the actions."""
     p = DREnv(env_cfg).p
-    return np.array([oracle(Scenario(d, p)) for d in days])
+    return np.array([oracle(Scenario(d, p), sub) for d in days])
 
 
 def summarise(returns, days, env_cfg):
@@ -70,8 +70,13 @@ def summarise(returns, days, env_cfg):
 
 
 def baselines(days, env_cfg):
-    """Metrics for the no-control, rule-based, random and oracle references."""
+    """Metrics for the no-control, rule-based and random references plus both oracles.
+
+    `oracle_discrete` is the exact optimum on the agents' 5-action grid, so it is the ceiling for the
+    discrete agents; `oracle` uses a 10x finer grid and is the reference every score is divided by.
+    """
     pols = {"no_control": no_control, "rule_based": rule_based, "random": random_policy(0)}
     out = {k: summarise(evaluate(f, days, env_cfg), days, env_cfg) for k, f in pols.items()}
+    out["oracle_discrete"] = summarise(oracle_returns(days, env_cfg, sub=1), days, env_cfg)
     out["oracle"] = summarise(oracle_returns(days, env_cfg), days, env_cfg)
     return out
