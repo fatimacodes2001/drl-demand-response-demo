@@ -1,0 +1,6 @@
+extends: base.yaml
+name: ppo
+train: {total_steps: 1000000}
+eval: {every_steps: 100000}
+algo: {name: ppo, hidden: 128, lr: 5.0e-4, gamma: 0.99, gae_lambda: 0.95, clip: 0.2, epochs: 8,
+       minibatch: 256, n_envs: 8, rollout_len: 96, vf_coef: 0.5, ent_coef: 0.005, reward_scale: 0.5}

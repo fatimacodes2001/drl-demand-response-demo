@@ -1,0 +1,7 @@
+extends: base.yaml
+name: alphazero
+train: {total_steps: 30000}
+eval: {every_steps: 3000}
+algo: {name: alphazero, hidden: 128, lr: 1.0e-3, gamma: 0.99, sims: 64, c_puct: 1.5,
+       dirichlet_alpha: 0.5, dirichlet_frac: 0.15, temperature: 0.3, episodes_per_iter: 4,
+       train_steps: 100, batch: 128, buffer: 20000, value_coef: 1.0, value_scale: 10.0}

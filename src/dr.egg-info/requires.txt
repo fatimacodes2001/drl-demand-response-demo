@@ -1,0 +1,8 @@
+torch>=2.5
+numpy
+pyyaml
+matplotlib
+mlflow
+
+[dev]
+pytest

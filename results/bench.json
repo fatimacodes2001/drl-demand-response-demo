@@ -1,0 +1,128 @@
+[
+  {
+    "device": "cpu",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 128,
+    "updates_per_s": 3819.3855830494704
+  },
+  {
+    "device": "mps",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 128,
+    "updates_per_s": 2112.15240522618
+  },
+  {
+    "device": "cpu",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 1024,
+    "updates_per_s": 1357.3342605413786
+  },
+  {
+    "device": "mps",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 1024,
+    "updates_per_s": 2232.5685252009475
+  },
+  {
+    "device": "cpu",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 8192,
+    "updates_per_s": 263.6253093703678
+  },
+  {
+    "device": "mps",
+    "hidden": 128,
+    "layers": 2,
+    "batch": 8192,
+    "updates_per_s": 1435.3580401457607
+  },
+  {
+    "device": "cpu",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 128,
+    "updates_per_s": 358.8083965956142
+  },
+  {
+    "device": "mps",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 128,
+    "updates_per_s": 1351.164957480774
+  },
+  {
+    "device": "cpu",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 1024,
+    "updates_per_s": 162.1177988413761
+  },
+  {
+    "device": "mps",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 1024,
+    "updates_per_s": 650.2872530431133
+  },
+  {
+    "device": "cpu",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 8192,
+    "updates_per_s": 39.358337739879396
+  },
+  {
+    "device": "mps",
+    "hidden": 512,
+    "layers": 4,
+    "batch": 8192,
+    "updates_per_s": 97.83787126197859
+  },
+  {
+    "device": "cpu",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 128,
+    "updates_per_s": 73.4487921760187
+  },
+  {
+    "device": "mps",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 128,
+    "updates_per_s": 173.81200984063005
+  },
+  {
+    "device": "cpu",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 1024,
+    "updates_per_s": 20.402038892474202
+  },
+  {
+    "device": "mps",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 1024,
+    "updates_per_s": 53.063194506789664
+  },
+  {
+    "device": "cpu",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 8192,
+    "updates_per_s": 3.8783522602511646
+  },
+  {
+    "device": "mps",
+    "hidden": 2048,
+    "layers": 4,
+    "batch": 8192,
+    "updates_per_s": 7.856371603499323
+  }
+]

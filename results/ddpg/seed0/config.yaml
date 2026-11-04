@@ -1,0 +1,30 @@
+name: ddpg
+seed: 0
+tracker: mlflow
+device: auto
+env:
+  fcas_price: 0.8
+  degradation: 0.03
+  feedin: 0.06
+train:
+  total_steps: 60000
+  n_train_days: 200
+eval:
+  every_steps: 6000
+  val_days: 10
+  test_days: 50
+algo:
+  name: ddpg
+  per: false
+  hidden: 128
+  actor_lr: 0.0001
+  critic_lr: 0.001
+  gamma: 0.99
+  tau: 0.005
+  batch: 128
+  buffer: 100000
+  learning_starts: 1000
+  noise_start: 0.5
+  noise_end: 0.1
+  noise_decay_steps: 30000
+  reward_scale: 1.0

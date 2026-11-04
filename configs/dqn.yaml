@@ -1,0 +1,5 @@
+extends: base.yaml
+name: dqn
+algo: {name: dqn, hidden: 128, lr: 5.0e-4, gamma: 0.99, batch: 128, buffer: 100000,
+       learning_starts: 1000, target_update: 500, eps_start: 1.0, eps_end: 0.05,
+       eps_decay_steps: 30000, reward_scale: 1.0}

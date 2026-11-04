@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: dr
+Version: 0.1.0
+Summary: Reproducible deep-RL experiments on a synthetic demand-response task
+Requires-Python: >=3.10
+Requires-Dist: torch>=2.5
+Requires-Dist: numpy
+Requires-Dist: pyyaml
+Requires-Dist: matplotlib
+Requires-Dist: mlflow
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"

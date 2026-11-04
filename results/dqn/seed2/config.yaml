@@ -1,0 +1,28 @@
+name: dqn
+seed: 2
+tracker: mlflow
+device: auto
+env:
+  fcas_price: 0.8
+  degradation: 0.03
+  feedin: 0.06
+train:
+  total_steps: 60000
+  n_train_days: 200
+eval:
+  every_steps: 6000
+  val_days: 10
+  test_days: 50
+algo:
+  name: dqn
+  hidden: 128
+  lr: 0.0005
+  gamma: 0.99
+  batch: 128
+  buffer: 100000
+  learning_starts: 1000
+  target_update: 500
+  eps_start: 1.0
+  eps_end: 0.05
+  eps_decay_steps: 30000
+  reward_scale: 1.0

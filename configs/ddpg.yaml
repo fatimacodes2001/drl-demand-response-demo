@@ -1,0 +1,5 @@
+extends: base.yaml
+name: ddpg
+algo: {name: ddpg, per: false, hidden: 128, actor_lr: 1.0e-4, critic_lr: 1.0e-3, gamma: 0.99, tau: 0.005,
+       batch: 128, buffer: 100000, learning_starts: 1000, noise_start: 0.5, noise_end: 0.1,
+       noise_decay_steps: 30000, reward_scale: 1.0}

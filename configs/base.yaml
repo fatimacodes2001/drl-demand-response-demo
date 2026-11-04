@@ -1,0 +1,16 @@
+# Shared defaults. Every experiment config `extends` this file.
+name: base
+seed: 0
+tracker: mlflow        # mlflow | none  (MLFLOW_TRACKING_URI overrides the local ./mlflow.db (sqlite) store)
+device: auto            # auto = cuda if available else cpu
+env:
+  fcas_price: 0.8       # $/kWh discharged during a frequency event
+  degradation: 0.03     # $/kWh battery throughput
+  feedin: 0.06          # $/kWh export tariff
+train:
+  total_steps: 60000    # real env steps (one episode = 48 steps)
+  n_train_days: 200     # training days 0..199; val/test days are disjoint
+eval:
+  every_steps: 6000
+  val_days: 10          # learning-curve evaluation
+  test_days: 50         # final held-out evaluation

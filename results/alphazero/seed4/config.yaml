@@ -1,0 +1,31 @@
+name: alphazero
+seed: 4
+tracker: mlflow
+device: auto
+env:
+  fcas_price: 0.8
+  degradation: 0.03
+  feedin: 0.06
+train:
+  total_steps: 30000
+  n_train_days: 200
+eval:
+  every_steps: 3000
+  val_days: 10
+  test_days: 50
+algo:
+  name: alphazero
+  hidden: 128
+  lr: 0.001
+  gamma: 0.99
+  sims: 64
+  c_puct: 1.5
+  dirichlet_alpha: 0.5
+  dirichlet_frac: 0.15
+  temperature: 0.3
+  episodes_per_iter: 4
+  train_steps: 100
+  batch: 128
+  buffer: 20000
+  value_coef: 1.0
+  value_scale: 10.0

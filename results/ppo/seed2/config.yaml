@@ -1,0 +1,29 @@
+name: ppo
+seed: 2
+tracker: mlflow
+device: auto
+env:
+  fcas_price: 0.8
+  degradation: 0.03
+  feedin: 0.06
+train:
+  total_steps: 1000000
+  n_train_days: 200
+eval:
+  every_steps: 100000
+  val_days: 10
+  test_days: 50
+algo:
+  name: ppo
+  hidden: 128
+  lr: 0.0005
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 8
+  minibatch: 256
+  n_envs: 8
+  rollout_len: 96
+  vf_coef: 0.5
+  ent_coef: 0.005
+  reward_scale: 0.5

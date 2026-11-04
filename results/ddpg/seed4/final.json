@@ -1,0 +1,16 @@
+{
+  "return_mean": 1.2112059766650105,
+  "return_std": 3.8023535540739344,
+  "saving_per_day": 7.838822917617773,
+  "pct_of_oracle_saving": 89.29690003301415,
+  "config_hash": "a075f564e781",
+  "code_hash": "81cd166f09cb",
+  "data_hash": "843f4846704f",
+  "libs": "torch2.15.0+numpy2.5.4",
+  "device": "cpu",
+  "fingerprint": "32fa382aad24",
+  "algo": "ddpg",
+  "seed": 4,
+  "env_steps": 60000,
+  "train_wall_s": 57.0
+}
