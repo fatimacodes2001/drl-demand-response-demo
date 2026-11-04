@@ -1,205 +1,232 @@
 # drl-demand-response-demo
 
-A small, fully reproducible reinforcement-learning harness with two tasks:
+I built this in a week to show how I run RL experiments: how I train, how I measure whether something got
+better, and how someone else can re-run my numbers and get the same ones.
 
-- **Demand response** (single agent): a home battery arbitrages a time-of-use tariff and FCAS-style events.
-  Five agents (DQN, PPO, DDPG, PER-DDPG and an AlphaZero-style search agent) are scored against an exact
-  dynamic-programming optimum.
-- **Connect Four** (two-player self-play): the same AlphaZero-style agent plays itself from random weights and
-  is scored against fixed opponents and against its own previous checkpoint.
+There are two tasks on one harness. The first is a home battery that buys and sells electricity on a
+time-of-use tariff and gets paid for discharging during FCAS-style frequency events; five agents (DQN, PPO,
+DDPG, PER-DDPG and an AlphaZero-style search agent) are scored against the exact optimum. The second is Connect
+Four, where the same search agent trains from random weights by playing itself.
 
-Every run has a fingerprint (config + code + data + libraries + platform), is tracked in MLflow with its plots,
-can be re-run and checked bit-for-bit with one command, and resumes from a checkpoint without changing the
-result. All data is synthetic or generated; nothing comes from any employer, client or research partner.
+Every run gets a fingerprint of its config, code, data, libraries and platform. Every run is logged to MLflow
+with its plots. Any recorded run can be re-trained and compared with one command, and a run you kill and resume
+ends with the same numbers as one you never killed. The tests check all of this.
 
-**What this is and is not.** It is a demonstration of how I set up training, measurement and reproducibility,
-built in a few days for this purpose. The Connect Four agent is a real AlphaZero-style self-play loop (search,
-self-play, train on search targets, repeat) with measured improvement from random initialisation, but with a
-small MLP, 50 simulations and about 8000 games it is far from strong play. The demand-response task is a
-simplified stand-in for the energy-domain research in my publications, not that research itself.
+What it is not: it is not my published research, and the Connect Four agent is not a strong player. It is a
+small MLP with 50 search simulations and about 8000 games of training. It does improve, measurably, from random
+weights, and the harness separates what the network learned from what tree search gives you for free. The
+battery task is a simplified stand-in for the energy work in my papers, with synthetic data. Nothing here comes
+from an employer, a client or a research partner.
 
 ## Contents
-1. [Tasks](#1-tasks)
-2. [Algorithms](#2-algorithms)
+1. [The two tasks](#1-the-two-tasks)
+2. [The agents](#2-the-agents)
 3. [Install](#3-install)
-4. [Run](#4-run)
-5. [View runs and plots](#5-view-runs-and-plots)
+4. [Commands](#4-commands)
+5. [Where the runs go](#5-where-the-runs-go)
 6. [Configs](#6-configs)
-7. [Reproducibility](#7-reproducibility)
-8. [Results: demand response](#8-results-demand-response)
+7. [How reproducibility works, and where it stops](#7-how-reproducibility-works-and-where-it-stops)
+8. [Results: battery](#8-results-battery)
 9. [Results: Connect Four](#9-results-connect-four)
 10. [GPU](#10-gpu)
 11. [Layout](#11-layout)
-12. [Limitations](#12-limitations)
+12. [Known limits](#12-known-limits)
 
-## 1. Tasks
+## 1. The two tasks
 
-### Demand response (`task: dr`)
-One episode is one day of 48 half-hour steps. A 12.5 kWh battery earns money by charging when electricity is
-cheap and discharging when it is expensive or during an FCAS-style frequency event.
+### Battery dispatch (`task: dr`)
 
-| item | definition |
+One episode is one day in 48 half-hour steps. The battery holds 12.5 kWh.
+
+| | |
 |---|---|
-| Observation (147 values) | state of charge, time of day (sin/cos), and the remaining day's prices, event flags and net load (load minus PV), zero-padded |
-| Action | 5 discrete levels from full charge to full discharge (DQN, PPO, AlphaZero) or one float in [-1, 1] (DDPG) |
-| Reward | -(energy bill) + FCAS bonus for discharging in an event - degradation; the end-of-day charge is valued at the day's mean price |
-| Data | load, PV, price spikes and events generated per day from a seed: 200 train days, disjoint validation (5000+) and test (20000+) days |
+| Observation, 147 numbers | state of charge, time of day as sin/cos, then the rest of the day's prices, event flags and net load (load minus solar), zero-padded |
+| Action | five levels from full charge to full discharge; DDPG uses one float in [-1, 1] instead |
+| Reward | minus the energy bill, plus the FCAS bonus for discharging during an event, minus a degradation cost; what is left in the battery at midnight is valued at the day's mean price |
+| Data | load, solar, price spikes and events are generated from the day number: days 0-199 for training, 5000+ for validation, 20000+ for test |
 
-The whole remaining day is observed, so every agent plans from the same information as the tree search and the
-**dynamic-programming oracle is a reachable ceiling**, not a clairvoyant one. Scores are reported as **% of the
-oracle's saving over doing nothing** (0 = idle battery, 100 = optimal). The oracle runs on a grid 10x finer
-than the discrete actions, so it also bounds the continuous DDPG policy; `oracle_discrete` is the exact ceiling
-for the 5-action agents (91.2% of the fine oracle's saving on the test days).
+The agent sees the whole remaining day. That was a deliberate change from my first version, where agents saw six
+steps ahead while the search agent could clone the environment and peek at everything. Now every agent plans from
+the same information, and the dynamic-programming optimum is something a policy could reach, not a clairvoyant
+bound.
+
+Scores are percent of the oracle's saving over leaving the battery idle: 0 is idle, 100 is optimal. The oracle
+runs on a grid ten times finer than the five actions, so it also bounds DDPG's continuous policy. The exact
+optimum on the five-action grid, `oracle_discrete`, is 91.2% of that on the test days, so that is the ceiling for
+DQN, PPO and the search agent.
 
 ### Connect Four (`task: connect4`)
-Standard 6x7 board. The observation is two planes (own pieces, opponent pieces) relative to the player to move,
-so one network plays both colours. Evaluation plays a fixed set of random two-ply openings, each once as first
-and once as second player, against:
-- a **random** player,
-- a **win/block** heuristic (take an immediate win, otherwise block an immediate threat, otherwise random),
-- the agent's **previous checkpoint** (during training), and
-- additionally reports the **raw network with no search** so the network's own learning is separated from
-  what 50 simulations of tree search provide by themselves.
 
-## 2. Algorithms
-| name (config) | file | what it is | task |
+Standard 6x7 board. The observation is two planes, my pieces and theirs, from the point of view of whoever is
+about to move, so one network plays both colours.
+
+Scoring a self-play agent is the part I spent the most thought on. Every evaluation plays a fixed set of random
+two-ply openings, each once as first player and once as second, against three opponents: a random player, a
+heuristic that takes an immediate win or blocks an immediate threat and otherwise plays randomly, and the agent's
+own weights from the previous evaluation. It also plays the raw network with no search at all. The last two are
+what tell you whether training did anything. Search with 50 simulations finds wins and blocks on its own, so a
+win rate against the heuristic by itself proves little.
+
+## 2. The agents
+
+| config | file | what it is | task |
 |---|---|---|---|
-| `dqn` | `agents/dqn.py` | Double DQN with a target network and uniform replay | dr |
-| `ppo` | `agents/ppo.py` | Clipped-surrogate PPO with GAE and 8 parallel env copies | dr |
-| `ddpg` | `agents/ddpg.py` | DDPG: deterministic actor, Q critic, soft targets, Gaussian exploration noise | dr |
-| `per_ddpg` | `agents/ddpg.py` | DDPG with proportional prioritised replay (sum tree, annealed importance weights) | dr |
-| `alphazero` | `agents/alphazero.py` | PUCT search guided by a policy/value network, trained on its own search visit counts and returns | dr |
-| `c4_alphazero` | `agents/alphazero.py` | same agent, two-player: values flip sign each ply, moves are sampled for the first 8 plies then greedy, batches are mirror-augmented | connect4 |
+| `dqn` | `agents/dqn.py` | double DQN, target network, uniform replay | battery |
+| `ppo` | `agents/ppo.py` | clipped-surrogate PPO with GAE, 8 parallel envs | battery |
+| `ddpg` | `agents/ddpg.py` | DDPG with soft target updates and Gaussian exploration noise | battery |
+| `per_ddpg` | `agents/ddpg.py` | the same with proportional prioritised replay (sum tree, annealed importance weights) | battery |
+| `alphazero` | `agents/alphazero.py` | PUCT search guided by a policy/value net, trained on its own visit counts and returns | battery |
+| `c4_alphazero` | `agents/alphazero.py` | the same agent in two-player mode: values flip sign each ply, moves are sampled for 8 plies then greedy, batches are mirrored left-right | Connect Four |
 
-On demand response the "opponent" of the search agent is the stochastic day and the known env is the model, so
-it is single-agent planning, not self-play, and not MuZero (no learned dynamics).
+On the battery task the search agent's "opponent" is the day itself and the environment is the model, so that
+one is planning, not self-play, and there is no learned dynamics model as in MuZero.
 
 ## 3. Install
-Python 3.12 (3.10+ should work; developed and recorded on 3.12). Linux, macOS or Docker.
+
+Python 3.12 is what I recorded everything with; 3.10+ should work.
+
 ```bash
-make setup                 # venv, pinned deps, editable install of the `dr` package
-make test                  # ~40 s on a laptop: determinism, resume, fingerprint, replay, rules, golden values
+make setup     # venv, pinned dependencies, editable install of the `dr` package
+make test      # about 40 s on a laptop
 ```
+
 Without make: `python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/pip install -e .`
 
-Docker: `docker build -t drl-dr . && docker run --rm drl-dr` runs `make reproduce`. The image is
-`python:3.12-slim` plus the pinned requirements; on an x86_64 Linux host the PyPI torch wheel bundles CUDA, so
+Docker: `docker build -t drl-dr . && docker run --rm drl-dr` runs the smoke test. The image is `python:3.12-slim`
+plus the pinned requirements. On an x86_64 Linux host the torch wheel from PyPI includes CUDA, so
 `docker run --gpus all drl-dr python scripts/train.py --config configs/dqn.yaml --device cuda` trains on the GPU.
-On an arm64 Mac the same build gives CPU-only torch and the test suite passes inside it.
+On my arm64 Mac the same build is CPU-only, and the test suite passes inside it.
 
-## 4. Run
-| command | what it does | time on an M4 Pro laptop |
+## 4. Commands
+
+| command | does | time on my M4 Pro |
 |---|---|---|
-| `make test` | the test suite (bitwise golden comparison only on the platform the goldens were recorded on) | ~40 s |
-| `make reproduce` | smoke run of every algorithm and both tasks, 1 seed, tiny budgets, into `results/quick/` | ~2 min |
-| `make sweep` | demand response, 5 algorithms x 5 seeds, builds `results/summary.md` and plots | ~6 min (6 parallel jobs) |
-| `make sweep-c4` | Connect Four, 5 seeds x 200k plies, into `results/connect4/` | ~10 min (5 parallel jobs) |
-| `make verify RUN=results/dqn/seed1` | re-run a recorded run and check it reproduces | ~1 min for DQN |
-| `make bench` | CPU vs GPU update throughput (`PROFILE=1` adds a `torch.profiler` trace) | ~1 min |
-| `make golden` | refresh `tests/golden.json` after an intended change to results | ~20 s |
-| `make ui` | MLflow UI at http://127.0.0.1:5000 | |
+| `make test` | the test suite; the bitwise golden comparison only gates on the platform the goldens were recorded on | ~40 s |
+| `make reproduce` | smoke run of every algorithm on both tasks, one seed, tiny budgets, into `results/quick/` | ~2 min |
+| `make sweep` | battery task, 5 algorithms x 5 seeds, writes `results/summary.md` and the plots | ~6 min, 6 jobs |
+| `make sweep-c4` | Connect Four, 5 seeds x 200k plies, into `results/connect4/` | ~10 min, 5 jobs |
+| `make verify RUN=results/dqn/seed1` | re-train a recorded run and check it matches | ~1 min for DQN |
+| `make bench` | learner throughput, CPU vs GPU; `PROFILE=1` adds a `torch.profiler` trace | ~1 min |
+| `make golden` | re-record `tests/golden.json` after a change that is meant to alter results | ~20 s |
+| `make ui` | MLflow at http://127.0.0.1:5000 | |
 
-Single runs, overrides, interruption and resume:
+One run, with overrides, an interruption and a resume:
+
 ```bash
 python scripts/train.py --config configs/dqn.yaml --seed 0
 python scripts/train.py --config configs/ppo.yaml --seed 3 --device cuda --set algo.lr=1e-3 train.total_steps=500000
-python scripts/train.py --config configs/connect4_alphazero.yaml --seed 0 --stop-at 100000   # checkpoint and exit
-python scripts/train.py --config configs/connect4_alphazero.yaml --seed 0 --resume           # continue, same result
+python scripts/train.py --config configs/connect4_alphazero.yaml --seed 0 --stop-at 100000   # checkpoint, then exit
+python scripts/train.py --config configs/connect4_alphazero.yaml --seed 0 --resume           # same result as uninterrupted
 ```
-Finished runs with an identical fingerprint are skipped, so an interrupted sweep can simply be started again.
-Each run prints its learning curve as it goes; the first line is the untrained policy:
+
+A finished run whose fingerprint still matches is skipped, so if a sweep dies halfway you just start it again.
+Runs print their curve as they go. The first line is the untrained policy:
+
 ```
 [dqn s0] steps=      0 train=    nan val % of oracle saving=  -8.0 0s
 [dqn s0] steps=  60000 train=   0.41 val % of oracle saving=  88.3 43s
 ```
 
-## 5. View runs and plots
-**MLflow** (`make ui`, experiment `drl-demand-response`): one run per (config, seed), named
-`<variant>-seed<k>-<fingerprint prefix>`, with every config value as a param, the fingerprint parts and git
-state as tags, validation metrics per evaluation step, `test_*` final metrics, and artifacts: `config.yaml`,
-`meta.json`, `metrics.jsonl`, `final.json`, `plots/training_curve.png` and a task plot (`dispatch_day<N>.png`
-for demand response, `sample_game.png` for Connect Four). Each sweep also logs a `summary:<dir>` run with the
-comparison table and `learning_curves.png`, and `make bench` logs a `bench` run. Filter by `tags.variant` or
-`tags.fingerprint`; the store keeps every run ever logged, including superseded ones. Storage is `./mlflow.db`
-(SQLite); set `MLFLOW_TRACKING_URI` for a shared server, or `--set tracker=none` to disable tracking.
+## 5. Where the runs go
 
-**On disk**, per run, `results/<variant>/seed<k>/`:
+MLflow first. `make ui`, experiment `drl-demand-response`. One run per config and seed, named
+`<variant>-seed<k>-<fingerprint prefix>`. Params are the whole config. Tags are the fingerprint parts plus the
+git commit and whether the tree was dirty. Metrics are logged at every evaluation step, so the curves are live.
+Artifacts are `config.yaml`, `meta.json`, `metrics.jsonl`, `final.json`, the training curve, and a task plot:
+the battery schedule against the oracle for one test day, or one Connect Four game against the heuristic. Each
+sweep also logs a `summary:<dir>` run with the table and the comparison plot, and `make bench` logs a `bench`
+run. The store is `./mlflow.db`; set `MLFLOW_TRACKING_URI` for a shared server, or `--set tracker=none` to turn
+tracking off. The store keeps everything ever logged, including runs from before I fixed things, so filter by
+`tags.fingerprint` when you want the current ones.
+
+On disk, each run is `results/<variant>/seed<k>/`:
+
 ```
-config.yaml     resolved config          metrics.jsonl  one row per evaluation, including the untrained row
-meta.json       fingerprint parts, git SHA and dirty flag, python, host, GPU, start time
-final.json      held-out test metrics plus the fingerprint
-final.pt        network weights only (weights_only=True loadable)      plots/  figures
-ckpt.pt         full training state, git-ignored                      mlflow_run_id
+config.yaml     the resolved config            metrics.jsonl   one row per evaluation, untrained row first
+meta.json       fingerprint parts, git SHA, dirty flag, python, host, GPU, start time
+final.json      test metrics plus the fingerprint
+final.pt        network weights only, loads with weights_only=True
+ckpt.pt         full training state, git-ignored          plots/   mlflow_run_id
 ```
-Sweep-level: `results/summary.md`, `results/learning_curves.png`, `results/baselines.json`; same under
-`results/connect4/`. Re-plot a finished run with `python scripts/evaluate.py --run results/dqn/seed0`.
-Figure builders live in `src/dr/plotting.py`.
+
+Sweep-level files are `results/summary.md`, `results/learning_curves.png` and `results/baselines.json`, and the
+same under `results/connect4/`. `python scripts/evaluate.py --run results/dqn/seed0` re-scores a run and redraws
+its plots. The figure code is in `src/dr/plotting.py`.
 
 ## 6. Configs
-An experiment is one YAML file; demand-response configs `extends: base.yaml`, later keys override earlier ones,
-and `--set a.b=value` overrides anything from the command line (`1e-3` parses as a float).
+
+One YAML file per experiment. Battery configs `extends: base.yaml`, later keys win, and `--set a.b=value`
+overrides anything from the command line (`1e-3` is a float; PyYAML on its own would read it as a string, which
+bit me once).
+
 ```yaml
-extends: ddpg.yaml           # configs/per_ddpg.yaml
+extends: ddpg.yaml           # configs/per_ddpg.yaml, whole file
 name: per_ddpg
 algo: {per: true, per_alpha: 0.6, per_beta_start: 0.4}
 ```
-Shared keys: `task`, `seed`, `device` (`auto` = CUDA if available), `tracker` (`mlflow` | `none`), `env`, `train`
-(`total_steps`, `n_train_days`), `eval` (`every_steps`, `val_days`/`test_days` or `val_games`/`test_games`).
-`name` is the output folder and MLflow variant label; names in one sweep must be unique and variants in one
-results directory must share task, env and eval settings, or the report refuses to build a table.
 
-## 7. Reproducibility
-**Fingerprint.** Each run's identity is a 12-character hash of:
+Shared keys: `task`, `seed`, `device` (`auto` picks CUDA if present), `tracker`, `env`, `train`
+(`total_steps`, `n_train_days`) and `eval` (`every_steps`, then `val_days`/`test_days` or
+`val_games`/`test_games`). `name` is the output folder and the MLflow label. Names in one sweep must be unique,
+and everything in one results directory must share task, env and eval settings, otherwise the report refuses to
+build a table rather than build a misleading one.
 
-| part | contents |
+## 7. How reproducibility works, and where it stops
+
+Each run's identity is a 12-character hash of five parts:
+
+| part | what goes in |
 |---|---|
-| `config_hash` | the resolved config including the seed (logging keys `tracker`, `experiment` excluded) |
-| `code_hash` | every Python file under `src/dr` (scripts only launch and report, so they are excluded) |
-| `data_hash` | every generated day a demand-response run can touch, or the game plus opening seeds for Connect Four |
+| `config_hash` | the resolved config, seed included; `tracker` and `experiment` excluded because they cannot change results |
+| `code_hash` | every Python file under `src/dr`; `scripts/` is excluded because it only launches and reports |
+| `data_hash` | every generated day a battery run can touch, or the game plus the opening seeds for Connect Four |
 | `libs`, `platform`, `device` | torch, numpy and Python versions; OS and CPU architecture; cpu or cuda |
 
-It is in `meta.json`, `final.json` and the MLflow tags. Any change to config, source, data generator, library
-versions or machine changes it, so a number can always be traced to exactly what produced it, and a finished run
-is only skipped when its fingerprint still matches. With real data the dataset checksum would go in `data_hash`.
+The fingerprint is in `meta.json`, `final.json` and the MLflow tags. Change any input and it changes, so a number
+can always be traced to exactly what produced it, and a finished run is only skipped when nothing has changed.
+With real data, a dataset checksum would go into `data_hash`.
 
-**Determinism.** Python, numpy and torch are seeded, each agent owns its numpy generator and PPO its torch
-generator, torch runs one CPU thread with deterministic algorithms requested. CPU runs are bitwise repeatable.
-Checkpoints hold every RNG stream (numpy, torch, CUDA, PPO's generator), replay buffers (the prioritised
-buffer's sum tree is stored as built so float sums repeat), live env states and the previous evaluation's
-weights, so **interrupting a run and resuming it gives bit-identical metrics to an uninterrupted run**. The test
-suite asserts this for all six configurations, plus: same seed gives identical metrics, different seeds differ,
-finished runs are skipped, the fingerprint reacts to config, data and device changes, replay sampling follows
-priorities, the Connect Four rules, and a golden-value comparison (below).
+Determinism on one machine is exact. Python, numpy and torch are seeded, each agent owns its own numpy generator
+and PPO its own torch generator, and torch runs one CPU thread with deterministic kernels requested. Checkpoints
+hold every random-number stream (numpy, torch, CUDA, PPO's), the replay buffers (the prioritised buffer saves
+its sum tree as built, so the float sums come out in the same order), the live environments, and the previous
+evaluation's weights. That last one matters: an earlier version stored a `state_dict()` directly, which aliases
+the live parameters, so the "previous checkpoint" the Connect Four agent was scored against was silently its
+current self. The resume test caught it. The suite now asserts, for all six configurations, that stopping at 750
+steps and resuming gives the same metrics as never stopping.
 
-**Check it yourself.**
+Check it yourself:
+
 ```bash
 make verify RUN=results/dqn/seed1
 # fingerprint MATCH | learning curve MATCH | test return 1.779184 vs 1.779184 MATCH
 ```
-`verify` re-runs the recorded `config.yaml` in a temporary folder and compares the fingerprint, every row of the
-learning curve and the test result, exiting non-zero on a mismatch and saying which fingerprint part changed.
-Across machines use `scripts/verify.py --run ... --tol 1e-3`: the fingerprint will differ (platform, library
-versions) and float kernels may round differently.
 
-**Across platforms, measured.** `tests/golden.json` holds tiny-run (1500-step) results recorded on macOS arm64.
-On the recording platform `make test` requires bitwise agreement; elsewhere the same comparison runs as an
-informational test that may fail. In a Linux arm64 container on the same CPU, PPO, PER-DDPG and both search
-agents were bitwise identical to the macOS values, while DQN differed by 1.4% in mean return and DDPG by 0.09%:
-a different BLAS build changes the last bit of some reductions and 1500 chaotic training steps amplify it.
-Treat cross-platform agreement as statistical (same distribution over seeds), and same-platform agreement as
-exact. GitHub Actions runs the suite on Linux x86_64 on every push and reports the same comparison.
+`verify` re-trains from the saved config in a temporary folder and compares the fingerprint, every row of the
+learning curve and the test result. It exits non-zero on a mismatch and says which fingerprint part moved. On a
+different machine use `scripts/verify.py --run ... --tol 1e-3`; the fingerprint will differ and so may the last
+bits.
 
-**Splits and tuning.** Train, validation and test days/openings are disjoint. Hyperparameters were tuned with one
-seed on validation days and on test days 10000-10019; the reported test days (20000+) were never used for any
-decision. For Connect Four, the temperature schedule, augmentation and budget were chosen from single-seed runs
-scored on the validation openings; the test openings were only used for the final table.
+Across platforms I measured rather than assumed. `tests/golden.json` holds results of 1500-step runs recorded on
+macOS arm64. On that platform the tests require bitwise agreement. Inside a Linux container on the same CPU, PPO,
+PER-DDPG and both search agents came out bitwise identical to macOS; DQN was off by 1.4% in mean return and DDPG
+by 0.09%. A different BLAS build rounds some reductions differently, and 1500 steps of training amplify the last
+bit. So: exact on one platform, statistically the same across platforms. Off the recording platform the golden
+tests still run, but as informational tests that may fail. GitHub Actions runs the suite on Linux x86_64 on every
+push and shows the same comparison.
 
-**Recorded, not claimed.** CUDA runs use deterministic-algorithm mode but have not been run here; CUDA numbers
-and cross-GPU determinism are to be collected on a GPU machine with `make bench` and `make verify --tol`.
+Train, validation and test days or openings never overlap. I tuned hyperparameters with one seed on validation
+days and on test days 10000-10019; the test days in the tables (20000+) were not used for any decision. For
+Connect Four I chose the temperature schedule, the augmentation and the budget from single-seed runs on the
+validation openings; the test openings were used once, for the table.
 
-## 8. Results: demand response
-5 seeds, 50 held-out test days, one CPU core per run (Apple M4 Pro), mean ± sample std. Produced by `make sweep`
-at this commit; `make verify` on a recorded run reproduces it exactly.
+Not done yet: CUDA. Deterministic mode is requested but I have not run on a GPU here. `make bench` and
+`make verify --tol` on a GPU box are the first things I would do there.
+
+## 8. Results: battery
+
+Five seeds, 50 held-out test days, one CPU core per run on an Apple M4 Pro, mean ± sample standard deviation.
+This table is what `make sweep` produced at this commit, and `make verify` on any of those runs reproduces it.
 
 | method | test saving $/day | % of oracle saving | env steps | train wall (s) |
 |---|---|---|---|---|
@@ -213,37 +240,41 @@ at this commit; `make verify` on a recorded run reproduces it exactly.
 | per_ddpg | 8.87 ± 0.18 | 92.2 ± 1.9 | 60k | 120 |
 | ppo | 8.37 ± 0.08 | 87.0 ± 0.8 | 1M | 68 |
 
-Reading it: DQN reaches 88.2 of the 91.2 points available to a 5-action policy. DDPG's continuous actions let it
-pass that ceiling (94.3 of 100). PER gave no gain over uniform replay here and costs more time. PPO needs about
-17x more samples than DQN for a similar result. The search agent starts well above zero with an untrained network
-because planning with the exact model already works, and training lifts it to 82%; its budget counts env steps
-only, not the 64 simulations per step. Budgets and evaluation cadences differ per algorithm (set in the configs),
-so the curves in `results/learning_curves.png` are not matched-compute comparisons.
+DQN gets 88.2 of the 91.2 points a five-action policy can get. DDPG's continuous action takes it past that
+ceiling to 94.3. Prioritised replay did not help here and costs more time. PPO lands near DQN but needs about
+17 times the samples. The search agent starts well above zero before any training, because planning with the
+exact model already works, and training takes it to 82; its step count ignores the 64 simulations per step. The
+budgets and evaluation cadences differ per algorithm, so the curves in `results/learning_curves.png` are not
+matched-compute comparisons.
 
 ## 9. Results: Connect Four
-5 seeds, 100 held-out openings played as both colours (200 games per opponent), 200k self-play plies per seed
-(about 8000 games, 560 s each on one core). Produced by `make sweep-c4` at this commit.
 
-| method | win % vs random | win % vs win/block | loss % vs win/block | net only (no search), win % vs win/block |
+Five seeds. 100 held-out openings, each played as both colours, so 200 games per opponent. 200k self-play plies
+per seed, about 8000 games, 560 s each on one core. From `make sweep-c4` at this commit.
+
+| method | win % vs random | win % vs win/block | loss % vs win/block | network only, no search: win % vs win/block |
 |---|---|---|---|---|
 | random | 48.5 | 3.5 | 96.5 | - |
-| winblock (vs itself) | 95.0 | 47.0 | 50.0 | - |
+| winblock (against itself) | 95.0 | 47.0 | 50.0 | - |
 | untrained search, 50 sims | 95.0 | 49.5 | 48.0 | 0.0 |
-| **c4_alphazero** (5 seeds) | 96.3 ± 0.8 | **68.5 ± 4.3** | **26.0 ± 3.7** | **45.8 ± 4.6** |
+| c4_alphazero, 5 seeds | 96.3 ± 0.8 | 68.5 ± 4.3 | 26.0 ± 3.7 | 45.8 ± 4.6 |
 
-Reading it: at equal search budget, training moved the agent from parity with the heuristic (49.5% wins, 48%
-losses) to 68.5% wins and 26% losses, and the raw network alone went from losing every game to winning 46%, so
-the network learned real play rather than relying on search. During training the agent beat its previous
-checkpoint in most evaluations (per-seed curves in `results/connect4/*/seed*/metrics.jsonl`,
-`val_winrate_prev`). Validation win rate against the heuristic rises from about 58% to 72% over the run
-(`results/connect4/learning_curves.png`); the first 20k plies show no gain, then learning takes off.
-Untrained search with 200 simulations already wins 79% (loss 16%), so search depth remains the cheaper route to
-strength at this scale; this is a demonstration of a working, measured self-play loop, not of a strong player.
+Same search budget before and after training: wins against the heuristic went from 49.5% to 68.5%, losses from
+48% to 26%. The raw network with no search went from losing every game to winning 46%, which is the line that
+says the network learned to play rather than the search doing the work. During training the agent beat its
+previous checkpoint in most evaluations (`val_winrate_prev` in each seed's `metrics.jsonl`). Validation win rate
+against the heuristic goes from about 58% to 72% over the run and does nothing for the first 20k plies
+(`results/connect4/learning_curves.png`).
+
+For scale: untrained search with 200 simulations already wins 79% and loses 16%. At this size, more search is
+still the cheaper way to get stronger. What this shows is a self-play loop that works and is measured properly.
 
 ## 10. GPU
-The networks here are small, and env stepping and tree search are CPU Python, so at these sizes a GPU does not
-speed training up. `make bench` measures learner-update throughput across network and batch sizes and logs a
-plot. Speedup of the accelerator over one CPU thread on this laptop (Apple M4 Pro, MPS; CUDA not yet measured):
+
+The networks are small and both the environment stepping and the tree search are Python on the CPU, so at these
+sizes a GPU does not make training faster. `make bench` measures learner-update throughput across network and
+batch sizes and logs the plot. Speedup of the accelerator over one CPU thread on my laptop (Apple M4 Pro, MPS;
+CUDA not measured yet):
 
 | network | batch 128 | batch 1024 | batch 8192 |
 |---|---|---|---|
@@ -251,33 +282,39 @@ plot. Speedup of the accelerator over one CPU thread on this laptop (Apple M4 Pr
 | 512 wide x 4 layers | 4.4x | 4.2x | 2.6x |
 | 2048 wide x 4 layers | 2.3x | 2.6x | 2.0x |
 
-On a CUDA machine run `make bench` (add `PROFILE=1` for a `torch.profiler` trace) and train with
-`--device cuda`: replay sampling, networks and updates move to the device, environments and search stay on CPU.
+On a CUDA machine, `make bench` (with `PROFILE=1` for a profiler trace) and `--device cuda` for training. Replay
+sampling, networks and updates move to the device; environments and search stay on the CPU.
 
 ## 11. Layout
+
 ```
-configs/            base.yaml, dqn, ppo, ddpg, per_ddpg, alphazero (demand response); connect4_alphazero
+configs/            base.yaml, dqn, ppo, ddpg, per_ddpg, alphazero (battery); connect4_alphazero
 src/dr/
-  env.py              demand-response env, scenario generator, vectorised DP oracle and oracle policy
+  env.py              battery env, day generator, vectorised DP oracle and oracle policy
   games/connect4.py   Connect Four env, scripted opponents, fixed-opening games
   tasks/              dr.py, connect4.py: env factory, evaluation protocol, baselines, data hash, plots
   agents/             common.py (BaseAgent, MLP, replay buffers, sum tree), dqn, ppo, ddpg, alphazero
-  runner.py           one experiment: run directory, eval loop, checkpoints, stop/resume, test, plots
+  runner.py           one experiment: run dir, eval loop, checkpoints, stop/resume, test, plots
   fingerprint.py      config + code + data + libs + platform hash
-  tracking.py         MLflow wrapper (no-op when disabled)       plotting.py   figure builders
-  config.py           YAML loading, extends, overrides, hash      evaluate.py   demand-response splits and baselines
+  tracking.py         MLflow wrapper, no-op when off          plotting.py   figures
+  config.py           YAML loading, extends, overrides, hash   evaluate.py   battery splits and baselines
 scripts/            train, sweep, report, evaluate, verify, bench, golden
 tests/              determinism, resume, fingerprint, replay, config, Connect Four rules, golden values
 .github/workflows/  CI on Linux        Makefile  Dockerfile  pyproject.toml  requirements.txt
 ```
 
-## 12. Limitations
-- Demand response is a synthetic single-household task with perfect day-ahead information; the real problem has
-  forecast error, which neither the oracle nor the agents face here.
-- The Connect Four agent is weak in absolute terms (MLP, 50 simulations, ~8000 games); the evaluation set is
-  small enough that single-seed win rates move by ±8 points, which is why 5 seeds and sample std are reported.
-- `code_hash` covers all of `src/dr`, including plotting code, so a plot-only change marks recorded runs as stale
-  even though it cannot alter results. This is deliberate caution, not precision.
-- No CUDA measurements yet. Bitwise agreement holds on one platform; across OS or BLAS builds two of six
-  agents differ at the last bit, which training amplifies (see Reproducibility).
-- The MLflow store keeps superseded runs from development; filter by `tags.fingerprint` for current ones.
+## 12. Known limits
+
+The battery task has perfect day-ahead information. The real problem has forecast error, and neither the oracle
+nor the agents face it here.
+
+The Connect Four agent is weak in absolute terms. With 40 validation games a single seed's win rate moves by
+about eight points between evaluations, which is why I report five seeds with sample standard deviation.
+
+`code_hash` covers everything under `src/dr`, including the plotting code, so a plot-only change marks recorded
+runs as stale even though it cannot change a result. I chose caution over precision there.
+
+No CUDA numbers yet. Bitwise agreement holds on one platform; across OS or BLAS builds, two of six agents differ
+in the last bit and training amplifies it.
+
+The MLflow store still has superseded runs from while I was building this.
