@@ -90,7 +90,7 @@ On an arm64 Mac the same build gives CPU-only torch and the test suite passes in
 ## 4. Run
 | command | what it does | time on an M4 Pro laptop |
 |---|---|---|
-| `make test` | the test suite | ~40 s |
+| `make test` | the test suite (bitwise golden comparison only on the platform the goldens were recorded on) | ~40 s |
 | `make reproduce` | smoke run of every algorithm and both tasks, 1 seed, tiny budgets, into `results/quick/` | ~2 min |
 | `make sweep` | demand response, 5 algorithms x 5 seeds, builds `results/summary.md` and plots | ~6 min (6 parallel jobs) |
 | `make sweep-c4` | Connect Four, 5 seeds x 200k plies, into `results/connect4/` | ~10 min (5 parallel jobs) |
@@ -179,10 +179,15 @@ make verify RUN=results/dqn/seed1
 `verify` re-runs the recorded `config.yaml` in a temporary folder and compares the fingerprint, every row of the
 learning curve and the test result, exiting non-zero on a mismatch and saying which fingerprint part changed.
 Across machines use `scripts/verify.py --run ... --tol 1e-3`: the fingerprint will differ (platform, library
-versions) and float kernels may round differently; the metrics should agree closely. `tests/golden.json` holds
-tiny-run results recorded on the development machine (macOS arm64); `make test` compares against them to 1e-4
-relative as a hard test and bitwise as an expected-to-maybe-fail test, and GitHub Actions runs the suite on
-Linux x86_64 on every push.
+versions) and float kernels may round differently.
+
+**Across platforms, measured.** `tests/golden.json` holds tiny-run (1500-step) results recorded on macOS arm64.
+On the recording platform `make test` requires bitwise agreement; elsewhere the same comparison runs as an
+informational test that may fail. In a Linux arm64 container on the same CPU, PPO, PER-DDPG and both search
+agents were bitwise identical to the macOS values, while DQN differed by 1.4% in mean return and DDPG by 0.09%:
+a different BLAS build changes the last bit of some reductions and 1500 chaotic training steps amplify it.
+Treat cross-platform agreement as statistical (same distribution over seeds), and same-platform agreement as
+exact. GitHub Actions runs the suite on Linux x86_64 on every push and reports the same comparison.
 
 **Splits and tuning.** Train, validation and test days/openings are disjoint. Hyperparameters were tuned with one
 seed on validation days and on test days 10000-10019; the reported test days (20000+) were never used for any
@@ -273,5 +278,6 @@ tests/              determinism, resume, fingerprint, replay, config, Connect Fo
   small enough that single-seed win rates move by ±8 points, which is why 5 seeds and sample std are reported.
 - `code_hash` covers all of `src/dr`, including plotting code, so a plot-only change marks recorded runs as stale
   even though it cannot alter results. This is deliberate caution, not precision.
-- No CUDA measurements yet; cross-architecture bitwise agreement is tested but not promised.
+- No CUDA measurements yet. Bitwise agreement holds on one platform; across OS or BLAS builds two of six
+  agents differ at the last bit, which training amplifies (see Reproducibility).
 - The MLflow store keeps superseded runs from development; filter by `tags.fingerprint` for current ones.

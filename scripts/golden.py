@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 from dr import config, runner
+from dr.fingerprint import fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 SMALL = ["train.total_steps=1500", "eval.every_steps=750", "eval.val_days=3", "eval.test_days=3",
@@ -24,14 +25,14 @@ def tiny_config(name):
 
 
 def main():
-    golden = {}
+    fp = fingerprint(tiny_config("dqn"), "cpu")
+    golden = {"_recorded_on": {"code_hash": fp["code_hash"], "libs": fp["libs"], "platform": fp["platform"]}}
     with tempfile.TemporaryDirectory() as tmp:
         for name in ALGOS:
             res = runner.run(tiny_config(name), Path(tmp) / name)
             golden[name] = {k: v for k, v in res.items() if isinstance(v, float) and k != "train_wall_s"}
-            golden[name]["code_hash"] = res["code_hash"]
     (ROOT / "tests/golden.json").write_text(json.dumps(golden, indent=2) + "\n")
-    print(f"wrote tests/golden.json for code hash {golden['dqn']['code_hash']}")
+    print(f"wrote tests/golden.json for {golden['_recorded_on']}")
 
 
 if __name__ == "__main__":
