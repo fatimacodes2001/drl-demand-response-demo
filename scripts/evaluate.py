@@ -1,37 +1,41 @@
-"""Re-evaluate a finished run on the test days and plot a day's dispatch against the oracle.
+"""Re-evaluate a finished run on the test split and regenerate its task plots.
 
-    python scripts/evaluate.py --run results/dqn/seed0 --day 20003
+    python scripts/evaluate.py --run results/dqn/seed0
 """
 import argparse
+import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import torch
 import yaml
 
-from dr import evaluate as ev
-from dr import plotting
 from dr.agents import AGENTS
 from dr.agents.common import seed_everything
+from dr.tasks import make_task
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--run", required=True)
-    p.add_argument("--day", type=int, default=ev.TEST_BASE)
     a = p.parse_args()
     run = Path(a.run)
     cfg = yaml.safe_load((run / "config.yaml").read_text())
     seed_everything(cfg["seed"])
-    agent = AGENTS[cfg["algo"]["name"]](cfg, "cpu", cfg["seed"])
+    task = make_task(cfg)
+    agent = AGENTS[cfg["algo"]["name"]](cfg, "cpu", cfg["seed"], task)
     agent.load_policy_state_dict(torch.load(run / "final.pt", weights_only=True))
-    pol = agent.policy()
 
-    days = ev.days_for("test", cfg["eval"]["test_days"])
-    print(ev.summarise(ev.evaluate(pol, days, cfg["env"]), days, cfg["env"]))
-    path = run / "plots" / f"dispatch_day{a.day}.png"
-    path.parent.mkdir(exist_ok=True)
-    plotting.dispatch(cfg["env"], {cfg["name"]: pol}, a.day).savefig(path, dpi=150)
-    print("saved", path)
+    print(json.dumps(task.evaluate(agent.policy(), "test"), indent=2))
+
+    def save(fig, name):
+        path = run / "plots" / name
+        path.parent.mkdir(exist_ok=True)
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+        print("saved", path)
+
+    task.plots(agent, save)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 # Shared defaults. Every experiment config `extends` this file.
 name: base
+task: dr               # dr | connect4
 seed: 0
 tracker: mlflow        # mlflow | none  (MLFLOW_TRACKING_URI overrides the local ./mlflow.db (sqlite) store)
 device: auto            # auto = cuda if available else cpu

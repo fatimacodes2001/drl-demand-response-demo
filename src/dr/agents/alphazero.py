@@ -11,15 +11,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..env import DREnv, OBS_DIM, N_ACTIONS
 from .common import BaseAgent
 
 
 class AZNet(nn.Module):
-    def __init__(self, hidden):
+    """Two-layer trunk with policy-logit and scalar value heads."""
+
+    def __init__(self, obs_dim, hidden, n_actions):
         super().__init__()
-        self.trunk = nn.Sequential(nn.Linear(OBS_DIM, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU())
-        self.pi, self.v = nn.Linear(hidden, N_ACTIONS), nn.Linear(hidden, 1)
+        self.trunk = nn.Sequential(nn.Linear(obs_dim, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU())
+        self.pi, self.v = nn.Linear(hidden, n_actions), nn.Linear(hidden, 1)
 
     def forward(self, x):
         h = self.trunk(x)
@@ -46,8 +47,9 @@ class Node:
 
     def __init__(self, env, done=False):
         self.env, self.done = env, done
-        self.N = np.zeros(N_ACTIONS); self.W = np.zeros(N_ACTIONS); self.R = np.zeros(N_ACTIONS)
-        self.children = [None] * N_ACTIONS
+        k = len(env.legal())
+        self.N, self.W, self.R = np.zeros(k), np.zeros(k), np.zeros(k)
+        self.children = [None] * k
 
 
 def expand(node, net, vscale):
@@ -67,7 +69,7 @@ def search(env, net, a, rng, noise):
     root = Node(env.clone())
     expand(root, net, vs)
     if noise:
-        d = np.zeros(N_ACTIONS)
+        d = np.zeros(len(root.P))
         d[root.legal] = rng.dirichlet([a["dirichlet_alpha"]] * int(root.legal.sum()))
         root.P = (1 - a["dirichlet_frac"]) * root.P + a["dirichlet_frac"] * d
     for _ in range(a["sims"]):
@@ -103,12 +105,12 @@ class AlphaZeroAgent(BaseAgent):
     nets = ("net",)
     opts = ("opt",)
 
-    def __init__(self, cfg, device, seed):
-        super().__init__(cfg, device, seed)
-        self.net = AZNet(self.a["hidden"]).to(device)
+    def __init__(self, cfg, device, seed, task):
+        super().__init__(cfg, device, seed, task)
+        self.net = AZNet(task.obs_dim, self.a["hidden"], task.n_actions).to(device)
         self.opt = torch.optim.Adam(self.net.parameters(), lr=self.a["lr"])
         cap = self.a["buffer"]
-        self.B = dict(obs=np.zeros((cap, OBS_DIM), np.float32), pi=np.zeros((cap, N_ACTIONS), np.float32),
+        self.B = dict(obs=np.zeros((cap, task.obs_dim), np.float32), pi=np.zeros((cap, task.n_actions), np.float32),
                       z=np.zeros(cap, np.float32))
         self.n, self.i, self.iters, self.sims_total = 0, 0, 0, 0
 
@@ -119,14 +121,14 @@ class AlphaZeroAgent(BaseAgent):
 
     def self_play(self, net):
         """Play one training day choosing actions from search visit counts; store (state, pi, return)."""
-        env = DREnv(self.env_cfg)
+        env = self.task.make_env()
         env.reset(self.sample_day())
         obs_l, pi_l, rew_l, done = [], [], [], False
         while not done:
             visits = search(env, net, self.a, self.rng, noise=True)
             pi = visits / visits.sum()
             w = visits ** (1.0 / self.a["temperature"])
-            act = int(self.rng.choice(N_ACTIONS, p=w / w.sum()))
+            act = int(self.rng.choice(len(w), p=w / w.sum()))
             obs_l.append(env.obs())
             pi_l.append(pi)
             _, r, done, _ = env.step(act)

@@ -2,7 +2,6 @@
 import numpy as np
 import torch
 
-from ..env import DREnv, OBS_DIM, N_ACTIONS
 from .common import BaseAgent, mlp
 
 
@@ -12,14 +11,14 @@ class PPOAgent(BaseAgent):
     nets = ("pi", "vf")
     opts = ("opt",)
 
-    def __init__(self, cfg, device, seed):
-        super().__init__(cfg, device, seed)
-        h = self.a["hidden"]
+    def __init__(self, cfg, device, seed, task):
+        super().__init__(cfg, device, seed, task)
+        h, obs_dim = self.a["hidden"], task.obs_dim
         self.gen = torch.Generator(device=device).manual_seed(seed)
-        self.pi = mlp(OBS_DIM, N_ACTIONS, h).to(device)
-        self.vf = mlp(OBS_DIM, 1, h).to(device)
+        self.pi = mlp(obs_dim, task.n_actions, h).to(device)
+        self.vf = mlp(obs_dim, 1, h).to(device)
         self.opt = torch.optim.Adam([*self.pi.parameters(), *self.vf.parameters()], lr=self.a["lr"])
-        self.envs = [DREnv(self.env_cfg) for _ in range(self.a["n_envs"])]
+        self.envs = [self.task.make_env() for _ in range(self.a["n_envs"])]
         self.obs = np.stack([e.reset(self.sample_day()) for e in self.envs])
         self.ep_ret = np.zeros(len(self.envs))
 
@@ -34,7 +33,7 @@ class PPOAgent(BaseAgent):
         """Collect one rollout from all envs, then run several clipped-surrogate epochs on it."""
         a, dev, n = self.a, self.dev, len(self.envs)
         T = a["rollout_len"]
-        O = torch.zeros(T, n, OBS_DIM, device=dev)
+        O = torch.zeros(T, n, self.task.obs_dim, device=dev)
         A = torch.zeros(T, n, dtype=torch.long, device=dev)
         LP, R, D = (torch.zeros(T, n, device=dev) for _ in range(3))
         V = torch.zeros(T + 1, n, device=dev)

@@ -8,16 +8,16 @@ import numpy as np
 from .env import DREnv, Scenario, STEPS, oracle_policy
 
 
-def run_curves(rows, ref=None):
-    """Training curves for one run: validation % of oracle saving and train return against env steps."""
+def run_curves(rows, ref, metric, label):
+    """Training curves for one run: the validation key metric and the train return against env steps."""
     x = [r["env_steps"] for r in rows]
     fig, ax = plt.subplots(1, 2, figsize=(10, 3.8))
-    ax[0].plot(x, [r["val_pct_of_oracle_saving"] for r in rows], marker="o")
+    ax[0].plot(x, [r[f"val_{metric}"] for r in rows], marker="o")
     for name, v in (ref or {}).items():
         ax[0].axhline(v, color="gray", ls="--", lw=1, label=name)
-    ax[0].axhline(100, color="k", lw=0.8, label="oracle")
-    ax[0].set(xlabel="environment steps", ylabel="% of oracle saving (val days)", title="Validation performance")
-    ax[0].legend(fontsize=8)
+    ax[0].set(xlabel="environment steps", ylabel=f"{label} (validation)", title="Validation performance")
+    if ref:
+        ax[0].legend(fontsize=8)
     tr = [(r["env_steps"], r["train_return"]) for r in rows if r.get("train_return", float("nan")) == r.get("train_return")]
     if tr:
         ax[1].plot(*zip(*tr))
@@ -28,23 +28,24 @@ def run_curves(rows, ref=None):
     return fig
 
 
-def compare_curves(curves, ref):
-    """Mean +/- std validation curves per method over seeds, with reference lines.
+def compare_curves(curves, ref, metric, label):
+    """Mean +/- sample std validation curves per method over seeds, with reference lines.
 
-    `curves` maps a method name to a list (one per seed) of metric-row lists.
+    `curves` maps a method name to a list (one per seed) of metric-row lists; `ref` maps a reference
+    name to its key-metric value.
     """
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     for name, runs in curves.items():
         n = min(len(r) for r in runs)
         x = np.maximum([r["env_steps"] for r in runs[0][:n]], 300)
-        y = np.array([[r["val_pct_of_oracle_saving"] for r in run[:n]] for run in runs])
+        y = np.array([[r[f"val_{metric}"] for r in run[:n]] for run in runs])
+        sd = y.std(0, ddof=1) if len(runs) > 1 else np.zeros(n)
         ax.plot(x, y.mean(0), label=f"{name} (n={len(runs)})")
-        ax.fill_between(x, y.mean(0) - y.std(0), y.mean(0) + y.std(0), alpha=0.2)
-    for name, ls in (("rule_based", ":"), ("no_control", "--")):
-        ax.axhline(ref[name], color="gray", ls=ls, lw=1, label=name)
-    ax.axhline(100, color="k", lw=0.8, label="oracle (DP)")
+        ax.fill_between(x, y.mean(0) - sd, y.mean(0) + sd, alpha=0.2)
+    for (name, v), ls in zip(ref.items(), (":", "--", "-.", "-")):
+        ax.axhline(v, color="gray", ls=ls, lw=1, label=name)
     ax.set_xscale("log")
-    ax.set(xlabel="environment steps (untrained model drawn at 300)", ylabel="% of oracle saving (val days)",
+    ax.set(xlabel="environment steps (untrained model drawn at 300)", ylabel=f"{label} (validation)",
            title="Learning curves, mean ± std over seeds")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)

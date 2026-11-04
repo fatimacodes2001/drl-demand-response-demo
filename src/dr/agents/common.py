@@ -149,15 +149,16 @@ class BaseAgent:
     """Shared plumbing: RNG, step counters, recent returns and complete checkpoints.
 
     Subclasses list their networks in `nets` and optimisers in `opts` (attribute names), and put any
-    other learning state (replay buffers, env states) in `extra_state` / `load_extra_state`.
+    other learning state (replay buffers, env states) in `extra_state` / `load_extra_state`. The task
+    provides `make_env()`, `obs_dim` and `n_actions`.
     """
 
     nets = ()
     opts = ()
 
-    def __init__(self, cfg, device, seed):
-        self.a, self.dev, self.env_cfg = cfg["algo"], device, cfg["env"]
-        self.n_days, self.total_steps = cfg["train"]["n_train_days"], cfg["train"]["total_steps"]
+    def __init__(self, cfg, device, seed, task):
+        self.a, self.dev, self.task, self.label = cfg["algo"], device, task, cfg["name"]
+        self.n_days, self.total_steps = cfg["train"].get("n_train_days", 1), cfg["train"]["total_steps"]
         self.rng = np.random.default_rng(seed)
         self.env_steps, self.recent = 0, []
 

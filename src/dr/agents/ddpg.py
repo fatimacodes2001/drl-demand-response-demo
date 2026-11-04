@@ -5,16 +5,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..env import DREnv, OBS_DIM
 from .common import BaseAgent, mlp, Replay, PrioritizedReplay
 
 
 class Actor(nn.Module):
     """Deterministic policy with a tanh output in [-1, 1]."""
 
-    def __init__(self, hidden):
+    def __init__(self, obs_dim, hidden):
         super().__init__()
-        self.net = mlp(OBS_DIM, 1, hidden)
+        self.net = mlp(obs_dim, 1, hidden)
 
     def forward(self, o):
         return torch.tanh(self.net(o))
@@ -26,17 +25,17 @@ class DDPGAgent(BaseAgent):
     nets = ("actor", "critic", "t_actor", "t_critic")
     opts = ("aopt", "copt")
 
-    def __init__(self, cfg, device, seed):
-        super().__init__(cfg, device, seed)
-        a = self.a
-        self.actor, self.critic = Actor(a["hidden"]).to(device), mlp(OBS_DIM + 1, 1, a["hidden"]).to(device)
+    def __init__(self, cfg, device, seed, task):
+        super().__init__(cfg, device, seed, task)
+        a, obs_dim = self.a, task.obs_dim
+        self.actor, self.critic = Actor(obs_dim, a["hidden"]).to(device), mlp(obs_dim + 1, 1, a["hidden"]).to(device)
         self.t_actor, self.t_critic = copy.deepcopy(self.actor), copy.deepcopy(self.critic)
         self.aopt = torch.optim.Adam(self.actor.parameters(), lr=a["actor_lr"])
         self.copt = torch.optim.Adam(self.critic.parameters(), lr=a["critic_lr"])
-        extra = [("next_obs", (OBS_DIM,)), ("act", (1,)), ("rew", ()), ("done", ())]
+        extra = [("next_obs", (obs_dim,)), ("act", (1,)), ("rew", ()), ("done", ())]
         self.per = a.get("per", False)
-        self.buf = (PrioritizedReplay(a["buffer"], OBS_DIM, extra, a["per_alpha"]) if self.per
-                    else Replay(a["buffer"], OBS_DIM, extra))
+        self.buf = (PrioritizedReplay(a["buffer"], obs_dim, extra, a["per_alpha"]) if self.per
+                    else Replay(a["buffer"], obs_dim, extra))
 
     def sigma(self):
         """Current std of the Gaussian exploration noise."""
@@ -85,7 +84,7 @@ class DDPGAgent(BaseAgent):
 
     def train_chunk(self):
         """One episode of noisy interaction with an update per env step."""
-        env = DREnv(self.env_cfg)
+        env = self.task.make_env()
         obs, done, ret, loss = env.reset(self.sample_day()), False, 0.0, 0.0
         while not done:
             if len(self.buf) < self.a["learning_starts"]:

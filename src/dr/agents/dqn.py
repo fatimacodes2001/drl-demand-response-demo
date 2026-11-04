@@ -4,7 +4,6 @@ import copy
 import torch
 import torch.nn.functional as F
 
-from ..env import DREnv, OBS_DIM, N_ACTIONS
 from .common import BaseAgent, mlp, Replay
 
 
@@ -14,13 +13,14 @@ class DQNAgent(BaseAgent):
     nets = ("q", "tq")
     opts = ("opt",)
 
-    def __init__(self, cfg, device, seed):
-        super().__init__(cfg, device, seed)
-        self.q = mlp(OBS_DIM, N_ACTIONS, self.a["hidden"]).to(device)
+    def __init__(self, cfg, device, seed, task):
+        super().__init__(cfg, device, seed, task)
+        obs_dim, n_actions = task.obs_dim, task.n_actions
+        self.q = mlp(obs_dim, n_actions, self.a["hidden"]).to(device)
         self.tq = copy.deepcopy(self.q)
         self.opt = torch.optim.Adam(self.q.parameters(), lr=self.a["lr"])
-        self.buf = Replay(self.a["buffer"], OBS_DIM,
-                          [("next_obs", (OBS_DIM,)), ("act", ()), ("rew", ()), ("done", ())])
+        self.buf = Replay(self.a["buffer"], obs_dim,
+                          [("next_obs", (obs_dim,)), ("act", ()), ("rew", ()), ("done", ())])
         self.updates = 0
 
     def eps(self):
@@ -60,10 +60,11 @@ class DQNAgent(BaseAgent):
 
     def train_chunk(self):
         """One episode of epsilon-greedy interaction with an update per env step."""
-        env = DREnv(self.env_cfg)
+        env = self.task.make_env()
         obs, done, ret, loss = env.reset(self.sample_day()), False, 0.0, 0.0
         while not done:
-            act = int(self.rng.integers(N_ACTIONS)) if self.rng.random() < self.eps() else self.greedy(obs)
+            explore = self.rng.random() < self.eps()
+            act = int(self.rng.integers(self.task.n_actions)) if explore else self.greedy(obs)
             nobs, r, done, _ = env.step(act)
             self.buf.add(obs=obs, next_obs=nobs, act=act, rew=r, done=float(done))
             obs, ret = nobs, ret + r

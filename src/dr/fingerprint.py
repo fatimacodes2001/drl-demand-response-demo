@@ -13,9 +13,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from . import evaluate as ev
 from .config import config_hash
-from .env import DREnv, Scenario
+from .tasks import make_task
 
 SRC = Path(__file__).parent
 
@@ -29,25 +28,9 @@ def code_hash():
     return h.hexdigest()[:12]
 
 
-def data_hash(cfg):
-    """Hash of every generated day a run can touch plus the env parameters.
-
-    With real data this is where a dataset checksum (for example a DVC hash) would go.
-    """
-    p = DREnv(cfg["env"]).p
-    days = [*range(cfg["train"]["n_train_days"]), *ev.days_for("val", cfg["eval"]["val_days"]),
-            *ev.days_for("test", cfg["eval"]["test_days"])]
-    h = hashlib.sha256(json.dumps(p, sort_keys=True).encode())
-    for d in days:
-        s = Scenario(d, p)
-        for arr in (s.load, s.pv, s.price, s.event):
-            h.update(np.asarray(arr, np.float64).tobytes())
-    return h.hexdigest()[:12]
-
-
 def fingerprint(cfg, device):
     """Return the hash components and the combined `fingerprint`."""
-    parts = dict(config_hash=config_hash(cfg), code_hash=code_hash(), data_hash=data_hash(cfg),
+    parts = dict(config_hash=config_hash(cfg), code_hash=code_hash(), data_hash=make_task(cfg).data_hash(cfg),
                  libs=f"torch{torch.__version__}+numpy{np.__version__}+py{platform.python_version()}",
                  platform=f"{platform.system()}-{platform.machine()}", device=device)
     parts["fingerprint"] = hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
