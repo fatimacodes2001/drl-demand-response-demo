@@ -22,6 +22,11 @@ def rows(run_dir):
             for line in (run_dir / "metrics.jsonl").read_text().splitlines()]
 
 
+def final(res):
+    """Final test metrics without the wall-clock field."""
+    return {k: v for k, v in res.items() if k != "train_wall_s"}
+
+
 def cfg_for(name, seed=0):
     """A tiny, CPU-only, untracked version of a shipped config."""
     c = config.load(ROOT / f"configs/{name}.yaml", SMALL)
@@ -51,7 +56,7 @@ def test_same_seed_same_metrics(algo, tmp_path):
     r1 = runner.run(cfg_for(algo), tmp_path / "a")
     r2 = runner.run(cfg_for(algo), tmp_path / "b")
     assert rows(tmp_path / "a") == rows(tmp_path / "b")
-    assert r1["return_mean"] == r2["return_mean"]
+    assert final(r1) == final(r2)
 
 
 def test_different_seed_differs(tmp_path):
@@ -59,6 +64,9 @@ def test_different_seed_differs(tmp_path):
     a = runner.run(cfg_for("dqn", 0), tmp_path / "a")
     b = runner.run(cfg_for("dqn", 1), tmp_path / "b")
     assert a["return_mean"] != b["return_mean"]
+    c = runner.run(cfg_for("connect4_alphazero", 0), tmp_path / "c")
+    d = runner.run(cfg_for("connect4_alphazero", 1), tmp_path / "d")
+    assert rows(tmp_path / "c") != rows(tmp_path / "d")
 
 
 def test_finished_run_is_skipped(tmp_path):
@@ -76,7 +84,7 @@ def test_resume_is_bit_identical_to_uninterrupted_run(algo, tmp_path):
     straight = runner.run(cfg_for(algo), tmp_path / "a")
     assert runner.run(cfg_for(algo), tmp_path / "b", stop_at=750) is None
     resumed = runner.run(cfg_for(algo), tmp_path / "b", resume=True)
-    assert resumed["return_mean"] == straight["return_mean"]
+    assert final(resumed) == final(straight)
     assert rows(tmp_path / "a") == rows(tmp_path / "b")
 
 

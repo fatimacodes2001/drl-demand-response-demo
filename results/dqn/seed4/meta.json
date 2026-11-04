@@ -1,14 +1,15 @@
 {
-  "config_hash": "9f108944f9ff",
-  "code_hash": "81cd166f09cb",
+  "config_hash": "a0f044132285",
+  "code_hash": "07955ed0c37d",
   "data_hash": "843f4846704f",
-  "libs": "torch2.15.0+numpy2.5.4",
+  "libs": "torch2.15.0+numpy2.5.4+py3.12.15",
+  "platform": "Darwin-arm64",
   "device": "cpu",
-  "fingerprint": "2951d5473f47",
-  "git_sha": "unknown",
+  "fingerprint": "4b9684183861",
+  "git_sha": "69c52ec79e9d5e89183cba3fe7e0e99e0f166c65",
   "git_dirty": false,
   "python": "3.12.15",
   "host": "MacBook-Pro.local",
   "gpu": null,
-  "started": "2026-11-04T22:25:18"
+  "started": "2026-11-04T23:13:51"
 }

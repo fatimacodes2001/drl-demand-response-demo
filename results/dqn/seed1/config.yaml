@@ -1,4 +1,5 @@
 name: dqn
+task: dr
 seed: 1
 tracker: mlflow
 device: auto

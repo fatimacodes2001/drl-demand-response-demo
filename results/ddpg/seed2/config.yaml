@@ -1,4 +1,5 @@
 name: ddpg
+task: dr
 seed: 2
 tracker: mlflow
 device: auto
