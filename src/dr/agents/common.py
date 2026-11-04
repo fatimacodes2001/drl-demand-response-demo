@@ -67,23 +67,65 @@ class Replay:
         self.n, self.i = s["n"], s["i"]
 
 
+class SumTree:
+    """Binary tree of partial sums giving O(log n) priority updates and prefix-sum lookups."""
+
+    def __init__(self, cap):
+        self.size = 1 << max(cap - 1, 1).bit_length()
+        self.tree = np.zeros(2 * self.size)
+
+    @property
+    def total(self):
+        return self.tree[1]
+
+    def set(self, idx, values):
+        """Set leaf values at `idx` and refresh their ancestors."""
+        pos = np.asarray(idx) + self.size
+        self.tree[pos] = values
+        pos = np.unique(pos >> 1)
+        while pos[0] >= 1:
+            self.tree[pos] = self.tree[2 * pos] + self.tree[2 * pos + 1]
+            if pos[0] == 1:
+                break
+            pos = np.unique(pos >> 1)
+
+    def find(self, prefix):
+        """Leaf index whose cumulative-sum interval contains each value in `prefix`."""
+        v, node = np.asarray(prefix, np.float64).copy(), np.ones(len(prefix), np.int64)
+        while node[0] < self.size:
+            left = 2 * node
+            go_right = v > self.tree[left]
+            v -= np.where(go_right, self.tree[left], 0.0)
+            node = left + go_right
+        return node - self.size
+
+    def leaf(self, idx):
+        return self.tree[np.asarray(idx) + self.size]
+
+
 class PrioritizedReplay(Replay):
-    """Proportional prioritised replay (Schaul et al. 2016) with importance-sampling weights."""
+    """Proportional prioritised replay (Schaul et al. 2016) with stratified sampling and IS weights."""
 
     def __init__(self, cap, obs_dim, extra=(), alpha=0.6):
         super().__init__(cap, obs_dim, extra)
-        self.alpha, self.pri, self.max_pri = alpha, np.zeros(cap, np.float64), 1.0
+        self.alpha, self.tree, self.max_pri = alpha, SumTree(cap), 1.0
+        self.pri = np.zeros(cap, np.float64)
+
+    def _set(self, idx, pri):
+        self.pri[idx] = pri
+        self.tree.set(idx, np.asarray(pri) ** self.alpha)
 
     def add(self, **kw):
         # new transitions get the current maximum priority so each is replayed at least once
-        self.pri[self.i] = self.max_pri
+        self._set(np.array([self.i]), self.max_pri)
         super().add(**kw)
 
     def sample(self, rng, batch, device, beta=0.4):
-        p = self.pri[:self.n] ** self.alpha
-        p /= p.sum()
-        idx = rng.choice(self.n, batch, p=p)
-        w = (self.n * p[idx]) ** -beta
+        """Stratified sample of `batch` transitions plus importance weights and indices."""
+        seg = self.tree.total / batch
+        idx = np.minimum(self.tree.find((np.arange(batch) + rng.random(batch)) * seg), self.n - 1)
+        p = self.tree.leaf(idx) / self.tree.total
+        w = (self.n * p) ** -beta
         out = {k: torch.as_tensor(v[idx], device=device) for k, v in self.data.items()}
         out["w"] = torch.as_tensor(w / w.max(), dtype=torch.float32, device=device)
         out["idx"] = idx
@@ -91,7 +133,7 @@ class PrioritizedReplay(Replay):
 
     def update(self, idx, td_abs):
         """Set the priorities of sampled transitions to their absolute TD error."""
-        self.pri[idx] = td_abs + 1e-6
+        self._set(idx, td_abs + 1e-6)
         self.max_pri = max(self.max_pri, float(td_abs.max()))
 
     def state(self):
@@ -99,4 +141,5 @@ class PrioritizedReplay(Replay):
 
     def load(self, s):
         super().load(s)
-        self.pri[:len(s["pri"])], self.max_pri = s["pri"], s["max_pri"]
+        self.max_pri = s["max_pri"]
+        self._set(np.arange(len(s["pri"])), s["pri"])
