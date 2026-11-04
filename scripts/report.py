@@ -1,4 +1,6 @@
-"""Aggregate results/<variant>/seed*/ into summary.md and learning_curves.png and log them to MLflow."""
+"""Aggregate results/<variant>/seed*/ into summary.md and learning_curves.png and log them to MLflow.
+
+Standard deviations are sample standard deviations (ddof=1) across seeds."""
 import argparse
 import json
 from pathlib import Path
@@ -32,12 +34,12 @@ def main():
         fin = [json.loads(f.read_text()) for f in sorted(d.glob("seed*/final.json"))]
         pct = np.array([f["pct_of_oracle_saving"] for f in fin])
         sav = np.array([f["saving_per_day"] for f in fin])
-        rows.append((d.name, str(len(fin)), f"{sav.mean():.2f} ± {sav.std():.2f}",
-                     f"{pct.mean():.1f} ± {pct.std():.1f}", str(fin[0]["env_steps"]),
+        rows.append((d.name, str(len(fin)), f"{sav.mean():.2f} ± {sav.std(ddof=1):.2f}",
+                     f"{pct.mean():.1f} ± {pct.std(ddof=1):.1f}", str(fin[0]["env_steps"]),
                      f"{np.mean([f['train_wall_s'] for f in fin]):.0f}"))
         curves[d.name] = [[json.loads(line) for line in f.read_text().splitlines()]
                           for f in sorted(d.glob("seed*/metrics.jsonl"))]
-        metrics[f"{d.name}_pct_of_oracle_mean"], metrics[f"{d.name}_pct_of_oracle_std"] = float(pct.mean()), float(pct.std())
+        metrics[f"{d.name}_pct_of_oracle_mean"], metrics[f"{d.name}_pct_of_oracle_std"] = float(pct.mean()), float(pct.std(ddof=1))
 
     fig = plotting.compare_curves(curves, {k: base[k]["pct_of_oracle_saving"] for k in ("rule_based", "no_control")})
     fig.savefig(out / "learning_curves.png", dpi=150)
@@ -46,7 +48,7 @@ def main():
     fmt = lambda r: "| " + " | ".join(c.ljust(w[i]) for i, c in enumerate(r)) + " |"
     table = [fmt(rows[0]), "|" + "|".join("-" * (x + 2) for x in w) + "|", *map(fmt, rows[1:])]
     summary = out / "summary.md"
-    summary.write_text(f"Held-out test days ({len(days)}), mean ± std across seeds.\n\n" + "\n".join(table) + "\n")
+    summary.write_text(f"Held-out test days ({len(days)}), mean ± sample std across seeds.\n\n" + "\n".join(table) + "\n")
     print(summary.read_text())
     tracking.log_report("summary", "summary", metrics, {"learning_curves.png": fig},
                         [summary, out / "baselines.json"], out_dir=out)
