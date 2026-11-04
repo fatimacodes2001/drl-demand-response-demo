@@ -173,8 +173,13 @@ class BaseAgent:
         return float(np.mean(self.recent)) if self.recent else float("nan")
 
     def policy_state_dict(self):
-        """Network weights only; enough to act, small enough to commit."""
-        return {n: getattr(self, n).state_dict() for n in self.nets}
+        """Copies of the network weights only; enough to act, small enough to commit.
+
+        Copies, because `state_dict()` tensors alias the live parameters and a snapshot kept in memory
+        would otherwise change as training continues.
+        """
+        return {n: {k: v.detach().cpu().clone() for k, v in getattr(self, n).state_dict().items()}
+                for n in self.nets}
 
     def load_policy_state_dict(self, s):
         for n in self.nets:

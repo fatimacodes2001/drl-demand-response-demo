@@ -1,4 +1,5 @@
 name: per_ddpg
+task: dr
 seed: 1
 tracker: mlflow
 device: auto
@@ -30,4 +31,3 @@ algo:
   reward_scale: 1.0
   per_alpha: 0.6
   per_beta_start: 0.4
-  train_total: 60000
